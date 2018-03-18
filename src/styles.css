@@ -1,12 +1,16 @@
 @import '../node_modules/@ubio/css/index.css';
 
-
 @import './styles/globals.css';
 @import './styles/app.css';
 @import './styles/list.css';
 @import './styles/delta.css';
 @import './styles/json.css';
 @import './styles/http.css';
+@import './styles/details-block.css';
+
+.state-update section {
+  padding-left: 10px;
+}
 
 .ray {
   margin-bottom: 20px;
@@ -70,44 +74,23 @@
   overflow: hidden;
 }
 
-
-.delta > * {
-  margin-right: 5px;
-}
-
-.delta > :last-child {
-  margin-right: 0px;
-}
-
-.delta .value-added {
-  color: green;
-}
-
-.delta .value-modified {
-  color: orange;
-}
-
-.delta .value-deleted {
-  color: red;
-}
-
 .method {
-  padding: 5px;
+  padding: 2px 4px;
   border-radius: 2px;
 }
 
 .status-code {
-  padding: 5px;
+  padding: 2px 4px;
   border-radius: 2px;
-  background-color: #aed1be;
-  color: #121212;
+  background-color: var(--ui-success);
+  color: white;
   flex-shrink: 1;
   display: flex;
   white-space: nowrap;
 }
 
 .method.post {
-  background-color: #396b3f;
+  background-color: var(--ui-success);
   color: #f5f7fa;
 }
 

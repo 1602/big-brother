@@ -3,6 +3,12 @@
   --marker-size: 3px;
 }
 
+.list__item {
+  min-height: 28px;
+  align-items: center;
+  display: flex;
+}
+
 .list__item--success {
   box-shadow: var(--marker-size) 0 0 0 var(--ui-success) inset;
 }
@@ -13,7 +19,7 @@
 }
 
 .list__item--neutral {
-  box-shadow: var(--marker-size) 0 0 0 var(--ui-neutral) inset;
+  box-shadow: var(--marker-size) 0 0 0 var(--color-blue--400) inset;
 }
 
 .list__item--failure {

@@ -1,3 +1,6 @@
+.http {
+}
+
 .http__header-name {
   font-weight: 700;
   color: var(--color-warm--600);

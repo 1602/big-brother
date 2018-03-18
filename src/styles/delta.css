@@ -1,17 +1,55 @@
 .delta {
+  font-family: var(--font-family--mono);
   margin-left: 4ch;
+  --marker-size: 3px;
 }
 
-.delta__added {
-  color: green;
+.delta--added {
+  margin-top: 1px;
+  /* box-shadow: var(--marker-size) 0 0 0 var(--color-green--400) inset; */
+  padding-left: 4ch;
+  background-color: var(--color-green--200);
 }
 
-.delta__deleted {
-  color: red;
+.delta--deleted {
+  margin-top: 1px;
+  /* box-shadow: var(--marker-size) 0 0 0 var(--color-red--400) inset; */
+  padding-left: 4ch;
+  background-color: var(--color-red--200);
 }
 
-.delta__change-classifier {
+.delta--deleted:before {
+  content: '- ';
+  font-weight: 700;
+  color: var(--color-red--500);
+}
+
+.delta--added:before {
+  content: '+ ';
+  font-weight: 700;
+  color: var(--color-green--500);
+}
+
+.delta__key {
+  font-family: var(--font-family--mono);
   display: inline-block;
-  width: 2ch;
-  padding-left: 2ch;
+  line-height: 1.5;
+  padding-left: 3px;
+  padding-right: 3px;
 }
+
+.delta__key--added {
+  background-color: var(--color-green--200);
+  color: black;
+}
+
+.delta__key--modified {
+  background-color: var(--color-yellow--400);
+  color: black;
+}
+
+.delta__key--deleted {
+  background-color: var(--color-red--200);
+  color: black;
+}
+

@@ -1,16 +1,7 @@
 
-
-body {
-  background-color: white;
-  margin: 0;
-  font-family: verdana;
-  font-size: 10px;
-}
-
 :root {
-  --ui-success: #aed1be;
-  --ui-neutral: #c7c7c1;
-  --ui-failure: #f0b4b6;
   --font__line-height--mono: 1.5;
-  --font-size--mono: 10px;
+  --font-size--mono: 11px;
+  --font-size: 11px;
 }
+

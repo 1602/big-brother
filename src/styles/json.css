@@ -1,36 +1,42 @@
-.json__object {
+.json-value {
+  font-family: var(--font-family--mono);
+  line-height: 1.6;
+}
+
+.json-value--collapsed {
+  color: grey;
+  cursor: pointer;
+  background-color: var(--color-blue--100);
+}
+
+.json-value__object-property {
   margin-left: 4ch;
 }
 
-.json__object-property-key {
-  color: #383838; /* mono 700 */
+.json-value__key--object {
+  color: var(--color-mono--700);
 }
 
-.json__object-property-key:after {
+.json-value__key:after {
   content: ': ';
-  
 }
 
-.json__array-index {
+.json-value__key--array {
   color: royalblue;
 }
 
-.json__array-index:after {
-  content: ': ';
+.json-value--string {
+  color: var(--color-yellow--700);
 }
 
-.json__string {
-  color: #b36b00; /* yellow 700 */
+.json-value--number {
+  color: var(--color-blue--700);
 }
 
-.json__number {
-  color: #1c6285; /* blue 700 */
+.json-value--null {
+  color: var(--color-red--700);
 }
 
-.json__null {
-  color: #c72227 /* red 700 */
-}
-
-.json__bool {
-  color: #0d626e; /* grand-blue 700 */
+.json-value--bool {
+  color: var(--color-grand-blue--700);
 }

@@ -11,6 +11,7 @@ import FeatherIcons
 import Date
 import Strftime
 import JsonValue exposing (JsonValue)
+import Icons
 
 
 type alias Model =
@@ -22,6 +23,7 @@ type alias Model =
     , selectedId : Id
     , selectedEvent : Maybe Event
     , expandedNodes : List (List String)
+    , filter : Filter
     }
 
 
@@ -29,14 +31,20 @@ type alias Id =
     String
 
 
+type alias Filter =
+    { succeed : Bool
+    , fail : Bool
+    }
+
+
 type Event
-    = StateUpdate Id Value JsonDelta Message
+    = StateUpdate Id JsonValue JsonValue JsonDelta Message
     | TaskEvent Id Int Bool TaskReport
 
 
 type alias Message =
     { name : String
-    , payload : Value
+    , payload : JsonValue
     }
 
 
@@ -49,13 +57,14 @@ type TaskReport
             , headers : List ( String, String )
             }
         , response :
-            { status : { ok : Bool, code : Int, text : String }
-            , headers : List ( String, List String )
-            , error : Maybe JsonValue
-            , body : Maybe JsonValue
-            }
+            Maybe
+                { status : { ok : Bool, code : Int, text : String }
+                , headers : List ( String, List String )
+                , error : Maybe JsonValue
+                , body : Maybe JsonValue
+                }
+        , error : Maybe JsonValue
         }
-    | FailedHttpRequest { request : { url : String, method : String, data : Maybe Value }, response : { error : Value } }
     | FailTask Value
     | SucceedTask Value
     | CurrentTime Time
@@ -118,14 +127,15 @@ eventDecoder =
 
 stateUpdateDecoder : Decoder Event
 stateUpdateDecoder =
-    Decode.map4 StateUpdate
+    Decode.map5 StateUpdate
         (Decode.field "id" Decode.string)
-        (Decode.field "state" Decode.value)
+        (Decode.field "cmd" JsonValue.decoder)
+        (Decode.field "state" JsonValue.decoder)
         (Decode.field "delta" deltaDecoder)
         (Decode.field "msg"
             (Decode.map2 Message
                 (Decode.field "name" Decode.string)
-                (Decode.field "payload" Decode.value)
+                (Decode.field "payload" JsonValue.decoder)
             )
         )
 
@@ -143,7 +153,6 @@ taskReportDecoder : Decoder TaskReport
 taskReportDecoder =
     Decode.oneOf
         [ httpRequestDecoder
-        , failedHttpRequestDecoder
         , currentTimeTaskDecoder
         , failSucceedTaskDecoder
         , Decode.value |> Decode.map UnknownTask
@@ -178,22 +187,9 @@ currentTimeTaskDecoder =
         )
 
 
-failedHttpRequestDecoder : Decoder TaskReport
-failedHttpRequestDecoder =
-    Decode.map2 (\req res -> FailedHttpRequest { request = req, response = res })
-        (Decode.field "spec"
-            (Decode.map3 (\url method data -> { url = url, method = method, data = data })
-                (Decode.field "url" Decode.string)
-                (Decode.field "method" Decode.string)
-                (Decode.field "data" Decode.value |> Decode.maybe)
-            )
-        )
-        (Decode.at [ "result", "error" ] Decode.value |> Decode.map (\error -> { error = error }))
-
-
 httpRequestDecoder : Decoder TaskReport
 httpRequestDecoder =
-    Decode.map2 (\req res -> HttpRequest { request = req, response = res })
+    Decode.map3 (\req res err -> HttpRequest { request = req, response = res, error = err })
         (Decode.field "spec"
             (Decode.map4 (\url method headers data -> { url = url, method = method, headers = headers, data = data })
                 (Decode.field "url" Decode.string)
@@ -215,7 +211,9 @@ httpRequestDecoder =
                 (Decode.field "error" JsonValue.decoder |> Decode.maybe)
                 (Decode.field "body" JsonValue.decoder |> Decode.maybe)
             )
+            |> Decode.maybe
         )
+        (Decode.at [ "result", "error" ] JsonValue.decoder |> Decode.maybe)
 
 
 init : ( Model, Cmd Msg )
@@ -228,6 +226,7 @@ init =
     , selectedId = ""
     , selectedEvent = Nothing
     , expandedNodes = []
+    , filter = { succeed = False, fail = True }
     }
         ! []
 
@@ -317,7 +316,7 @@ view model =
             , if model.groupByRay then
                 raysStream model
               else
-                eventsStream model.selectedId model.events
+                eventsStream model.selectedId model.filter model.events
             ]
         , div [ class "app__content" ]
             [ model.selectedEvent |> Maybe.map (\e -> viewEventDetails e model.expandedNodes) |> Maybe.withDefault (text "") ]
@@ -327,13 +326,25 @@ view model =
 viewEventDetails : Event -> List (List String) -> Html Msg
 viewEventDetails e expandedNodes =
     case e of
-        TaskEvent _ _ _ tr ->
-            viewTaskDetails tr expandedNodes
+        TaskEvent _ duration _ tr ->
+            viewTaskDetails duration tr expandedNodes
 
-        StateUpdate _ state delta message ->
-            div [ class "json-dump" ]
-                [ viewDelta delta [] expandedNodes
-                  -- , div [ class "json-dump" ] [ state |> Encode.encode 4 |> text ]
+        StateUpdate _ command state delta message ->
+            div [ class "state-update" ]
+                [ detailsBlock ("Message: " ++ message.name)
+                    [ h4 [] [ text "payload" ]
+                    , viewJsonValue message.payload [ "payload" ] ([ "payload" ] :: expandedNodes)
+                    ]
+                , detailsBlock "State Update"
+                    [ h4 [] [ text "state ∆" ]
+                    , viewDelta delta [ "delta" ] expandedNodes
+                      -- , div [ class "json-dump" ] [ state |> Encode.encode 4 |> text ]
+                    , h4 [] [ text "updated state" ]
+                    , viewJsonValue state [ "state" ] expandedNodes
+                    ]
+                , detailsBlock "Command"
+                    [ viewJsonValue command [ "command" ] ([ "command" ] :: expandedNodes)
+                    ]
                 ]
 
 
@@ -353,12 +364,12 @@ viewDelta delta path expandedNodes =
 
         ValueModified before after ->
             div []
-                [ div [ class "delta__deleted" ] [ span [ class "delta__change-classifier" ] [ text "-" ], viewJsonValue before path expandedNodes ]
-                , div [ class "delta__added" ] [ span [ class "delta__change-classifier" ] [ text "+" ], viewJsonValue after path expandedNodes ]
+                [ div [ class "delta--deleted" ] [ viewJsonValue before path expandedNodes ]
+                , div [ class "delta--added" ] [ viewJsonValue after path expandedNodes ]
                 ]
 
         ValueAdded jv ->
-            div []
+            div [ class "delta--added" ]
                 [ viewJsonValue jv path expandedNodes
                 ]
 
@@ -368,15 +379,20 @@ viewDelta delta path expandedNodes =
         JustValue jv ->
             viewJsonValue jv path expandedNodes
 
-        _ ->
-            text ""
+        ValueDeleted jv ->
+            div [ class "delta--deleted" ]
+                [ viewJsonValue jv path expandedNodes
+                ]
+
+        NoChanges ->
+            text "Nothing changed"
 
 
 viewJsonValue : JsonValue -> List String -> List (List String) -> Html Msg
 viewJsonValue jv path expandedNodes =
     case jv of
         JsonValue.BoolValue bv ->
-            code [ class "json__bool" ]
+            span [ class "json-value json-value--bool" ]
                 [ text <|
                     if bv then
                         "true"
@@ -385,31 +401,31 @@ viewJsonValue jv path expandedNodes =
                 ]
 
         JsonValue.NumericValue nv ->
-            code [ class "json__number" ] [ nv |> toString |> text ]
+            span [ class "json-value json-value--number" ] [ nv |> toString |> text ]
 
         JsonValue.StringValue sv ->
-            code [ class "json__string" ] [ sv |> toString |> text ]
+            span [ class "json-value json-value--string" ] [ sv |> toString |> text ]
 
         JsonValue.NullValue ->
-            code [ class "json__null" ] [ text "null" ]
+            span [ class "json-value json-value--null" ] [ text "null" ]
 
         JsonValue.ObjectValue props ->
             if List.member path expandedNodes then
                 props
                     |> List.map
                         (\( k, v ) ->
-                            div []
-                                [ code [ class "json__object-property-key" ] [ text k ]
+                            div [ class "json-value json-value__object-property" ]
+                                [ span [ class "json-value json-value__key" ] [ text k ]
                                 , viewJsonValue v (path ++ [ k ]) expandedNodes
                                 ]
                         )
-                    |> div [ class "json__object" ]
+                    |> div [ class "json-value json-value--expandable" ]
             else
                 props
                     |> List.take 5
                     |> List.map (\( k, _ ) -> k)
                     |> String.join ", "
-                    |> (\s -> span [ onClick <| ToggleNode path ] [ "{ " ++ s ++ "... }" |> text ])
+                    |> (\s -> span [ class "json-value json-value--collapsed", onClick <| ToggleNode path ] [ "{ " ++ s ++ "... }" |> text ])
 
         JsonValue.ArrayValue items ->
             if List.member path expandedNodes then
@@ -417,13 +433,18 @@ viewJsonValue jv path expandedNodes =
                     |> List.indexedMap
                         (\index v ->
                             div []
-                                [ code [ class "json__array-index" ] [ toString index |> text ]
+                                [ span [ class "json-value json-value__key" ] [ toString index |> text ]
                                 , viewJsonValue v (path ++ [ toString index ]) expandedNodes
                                 ]
                         )
-                    |> div [ class "json__object" ]
+                    |> div [ class "json-value json-value--expandable" ]
             else
-                text "(collapsed)"
+                span
+                    [ class "json-value json-value--collapsed"
+                    , onClick <| ToggleNode path
+                    ]
+                    [ "[ " ++ (List.length items |> toString) ++ " items... ]" |> text
+                    ]
 
 
 dumpValue : JsonDelta -> String
@@ -442,66 +463,86 @@ dumpValue delta =
             ""
 
 
-viewTaskDetails : TaskReport -> List (List String) -> Html Msg
-viewTaskDetails tr expandedNodes =
+detailsBlock : String -> List (Html msg) -> Html msg
+detailsBlock header content =
+    div [ class "details-block" ]
+        [ h3 [ class "details-block__header" ] [ text header ]
+        , section [ class "details-block__content" ] content
+        ]
+
+
+viewTaskDetails : Int -> TaskReport -> List (List String) -> Html Msg
+viewTaskDetails duration tr expandedNodes =
     case tr of
         HttpRequest http ->
-            div []
-                [ h3 [] [ text "Request" ]
-                , div [ class "task-report http-request" ]
-                    [ span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
-                    , span [ class "url" ] [ http.request.url |> text ]
+            div [ class "http" ]
+                [ detailsBlock "Request"
+                    [ div [ class "task-report http-request" ]
+                        [ span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
+                        , span [ class "url" ] [ http.request.url |> text ]
+                        ]
+                    , h4 [] [ text "Headers" ]
+                    , http.request.headers
+                        |> List.map
+                            (\( header, value ) ->
+                                div []
+                                    [ span [ class "http__header-name" ] [ text header ]
+                                    , span [ class "http__header-value" ] [ value |> text ]
+                                    ]
+                            )
+                        |> div []
+                    , h4 [] [ text "Body" ]
+                    , div []
+                        [ http.request.data
+                            |> Maybe.map (\jv -> viewJsonValue jv [] expandedNodes)
+                            |> Maybe.withDefault ("Ø" |> text)
+                        ]
                     ]
-                , h4 [] [ text "Headers" ]
-                , http.request.headers
-                    |> List.map
-                        (\( header, value ) ->
-                            div []
-                                [ span [ class "http__header-name" ] [ text header ]
-                                , span [ class "http__header-value" ] [ value |> text ]
+                , detailsBlock "Response" <|
+                    case http.response of
+                        Just response ->
+                            [ div []
+                                [ span
+                                    [ classList
+                                        [ ( "badge", True )
+                                        , ( "badge--success", response.status.ok )
+                                        , ( "badge--failure", not response.status.ok )
+                                        ]
+                                    ]
+                                    [ response.status.code
+                                        |> toString
+                                        |> text
+                                    ]
+                                , span [] [ " " ++ response.status.text |> text ]
                                 ]
-                        )
-                    |> div []
-                , h4 [] [ text "Body" ]
-                , div [ class "json-dump" ]
-                    [ http.request.data |> Maybe.map (\jv -> viewJsonValue jv [] expandedNodes) |> Maybe.withDefault ("without request body" |> text)
-                    ]
-                , h3 [] [ text "Response" ]
-                , div []
-                    [ span
-                        [ classList
-                            [ ( "badge", True )
-                            , ( "badge--success", http.response.status.ok )
-                            , ( "badge--failure", not http.response.status.ok )
+                            , h4 [] [ text "Headers" ]
+                            , response.headers
+                                |> List.map
+                                    (\( header, values ) ->
+                                        div []
+                                            [ span [ class "http__header-name" ] [ text header ]
+                                            , span [ class "http__header-value" ] [ values |> String.join ", " |> text ]
+                                            ]
+                                    )
+                                |> div []
+                            , h4 [] [ text "Body" ]
+                            , response.body |> Maybe.map (\jv -> viewJsonValue jv [] expandedNodes) |> Maybe.withDefault (text "Ø")
                             ]
-                        ]
-                        [ http.response.status.code
-                            |> toString
-                            |> text
-                        ]
-                    , span [] [ " " ++ http.response.status.text |> text ]
-                    ]
-                , h4 [] [ text "Headers" ]
-                , http.response.headers
-                    |> List.map
-                        (\( header, values ) ->
-                            div []
-                                [ span [ class "http__header-name" ] [ text header ]
-                                , span [ class "http__header-value" ] [ values |> String.join ", " |> text ]
-                                ]
-                        )
-                    |> div []
-                , h4 [] [ text "Body" ]
-                , div [ class "json-dump" ]
-                    [ http.response.body |> Maybe.map (\jv -> viewJsonValue jv [] expandedNodes) |> Maybe.withDefault (text "empty")
-                    ]
-                ]
 
-        FailedHttpRequest http ->
-            div [ class "task-report http-request" ]
-                [ span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
-                , span [ class "url" ] [ http.request.url |> text ]
-                , span [] [ http.response.error |> toString |> text ]
+                        Nothing ->
+                            case http.error of
+                                Just error ->
+                                    [ h4 [] [ text "Error" ]
+                                    , div []
+                                        [ viewJsonValue error [] expandedNodes
+                                        ]
+                                    ]
+
+                                Nothing ->
+                                    [ text "In progress, perhaps" ]
+                , detailsBlock "Duration" <|
+                    [ toString duration ++ "ms" |> text
+                    ]
                 ]
 
         CurrentTime x ->
@@ -551,16 +592,35 @@ viewRay : Model -> String -> Maybe (Html Msg)
 viewRay model rayId =
     model.groupedEvents
         |> Dict.get rayId
-        |> Maybe.map (eventsStream model.selectedId)
+        |> Maybe.map (eventsStream model.selectedId model.filter)
 
 
-eventsStream : Id -> List Event -> Html Msg
-eventsStream selectedId events =
+eventsStream : Id -> Filter -> List Event -> Html Msg
+eventsStream selectedId filter events =
     events
         |> List.reverse
+        |> List.filter (applyFilter filter)
         |> List.take 200
         |> List.map (viewEvent selectedId)
         |> div [ class "events-stream list" ]
+
+
+applyFilter : Filter -> Event -> Bool
+applyFilter filter event =
+    case event of
+        TaskEvent _ _ isSuccess task ->
+            case task of
+                SucceedTask _ ->
+                    filter.succeed
+
+                FailTask _ ->
+                    filter.fail
+
+                _ ->
+                    True
+
+        StateUpdate _ _ _ _ _ ->
+            True
 
 
 viewEvent : Id -> Event -> Html Msg
@@ -570,6 +630,7 @@ viewEvent selectedId e =
             div
                 [ classList
                     [ ( "event-container", True )
+                    , ( "list__item", True )
                     , ( "list__item--success", isSuccess )
                     , ( "list__item--failure", not isSuccess )
                     , ( "list__item--selected", id == selectedId )
@@ -581,10 +642,11 @@ viewEvent selectedId e =
                   --, span [] [ text (toString duration) ]
                 ]
 
-        StateUpdate id state diff msg ->
+        StateUpdate id _ state diff msg ->
             div
                 [ classList
                     [ ( "event-container", True )
+                    , ( "list__item", True )
                     , ( "task-report", True )
                     , ( "list__item--neutral", True )
                     , ( "list__item--selected", id == selectedId )
@@ -596,7 +658,7 @@ viewEvent selectedId e =
                 , case diff of
                     ObjectDiff props ->
                         props
-                            |> List.map (\( key, delta ) -> span [ class ("badge " ++ (classifyChange delta)) ] [ text key ])
+                            |> List.map (\( key, delta ) -> span [ class (classifyChange delta) ] [ text key ])
                             |> span [ class "delta" ]
 
                     _ ->
@@ -608,16 +670,16 @@ classifyChange : JsonDelta -> String
 classifyChange delta =
     case delta of
         ValueAdded _ ->
-            "value-added"
+            "delta__key delta__key--added"
 
         ValueModified _ _ ->
-            "value-modified"
+            "delta__key delta__key--modified"
 
         ValueDeleted _ ->
-            "value-deleted"
+            "delta__key delta__key--deleted"
 
         _ ->
-            ""
+            "delta__key"
 
 
 viewTask : TaskReport -> Html Msg
@@ -625,22 +687,21 @@ viewTask task =
     case task of
         HttpRequest http ->
             div [ class "task-report http-request" ]
-                [ span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
+                [ Icons.send
+                , span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
                 , span [ class "url" ] [ http.request.url |> text ]
-                , span [ class "status-code" ] [ (http.response.status.code |> toString) ++ " " ++ http.response.status.text |> text ]
-                ]
+                , case http.response of
+                    Just res ->
+                        span [ class "status-code" ] [ res.status.code |> toString |> text ]
 
-        FailedHttpRequest http ->
-            div [ class "task-report http-request" ]
-                [ span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
-                , span [ class "url" ] [ http.request.url |> text ]
-                , span [] [ http.response.error |> toString |> text ]
+                    Nothing ->
+                        text ""
                 ]
 
         CurrentTime x ->
             div [ class "task-report" ]
                 [ FeatherIcons.clock |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
-                , span [] [ Strftime.format "%B %d %Y, %-I:%M:%S" (Date.fromTime x) |> text ]
+                , span [] [ Strftime.format "%B %d %Y, %H:%M:%S" (Date.fromTime x) |> text ]
                 ]
 
         FailTask err ->
