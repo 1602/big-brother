@@ -4,7 +4,7 @@ require('./styles.css');
 
 const Elm = require('./Main');
 const app = Elm.Main.fullscreen();
-const jdp = require('jsondiffpatch').create();
+const jdp = require('./assets/jdp.js').create();
 const uuid = require('uuid');
 
 const source = new EventSource('http://localhost:8989/events');
