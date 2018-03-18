@@ -1,0 +1,22 @@
+
+.list {
+  --marker-size: 3px;
+}
+
+.list__item--success {
+  box-shadow: var(--marker-size) 0 0 0 var(--ui-success) inset;
+}
+
+.list__item--selected {
+  background-color: #26303b !important;
+  color: #f5f7fa;
+}
+
+.list__item--neutral {
+  box-shadow: var(--marker-size) 0 0 0 var(--ui-neutral) inset;
+}
+
+.list__item--failure {
+  box-shadow: var(--marker-size) 0 0 0 var(--ui-failure) inset;
+}
+

@@ -1,0 +1,20 @@
+.app__container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app__content {
+  padding: 5px;
+  overflow: auto;
+  height: 100%;
+}
+
+.app__sidebar {
+  padding: 5px;
+  width: 500px;
+  height: 100vh;
+  flex-shrink: 0;
+}
+

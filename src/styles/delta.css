@@ -1,0 +1,17 @@
+.delta {
+  margin-left: 4ch;
+}
+
+.delta__added {
+  color: green;
+}
+
+.delta__deleted {
+  color: red;
+}
+
+.delta__change-classifier {
+  display: inline-block;
+  width: 2ch;
+  padding-left: 2ch;
+}

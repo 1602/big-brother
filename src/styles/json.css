@@ -1,0 +1,36 @@
+.json__object {
+  margin-left: 4ch;
+}
+
+.json__object-property-key {
+  color: #383838; /* mono 700 */
+}
+
+.json__object-property-key:after {
+  content: ': ';
+  
+}
+
+.json__array-index {
+  color: royalblue;
+}
+
+.json__array-index:after {
+  content: ': ';
+}
+
+.json__string {
+  color: #b36b00; /* yellow 700 */
+}
+
+.json__number {
+  color: #1c6285; /* blue 700 */
+}
+
+.json__null {
+  color: #c72227 /* red 700 */
+}
+
+.json__bool {
+  color: #0d626e; /* grand-blue 700 */
+}

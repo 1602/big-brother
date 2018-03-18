@@ -1,0 +1,128 @@
+@import '../node_modules/@ubio/css/index.css';
+
+
+@import './styles/globals.css';
+@import './styles/app.css';
+@import './styles/list.css';
+@import './styles/delta.css';
+@import './styles/json.css';
+@import './styles/http.css';
+
+.ray {
+  margin-bottom: 20px;
+  border: #eee;
+}
+
+.json-dump {
+  white-space: pre;
+  font-family: menlo, monospace;
+}
+
+.controls {
+  padding: 5px;
+}
+
+.controls > * {
+  margin: 5px;
+}
+
+.events-stream {
+  width: 100%;
+  overflow: auto;
+  height: calc(100% - 30px);
+}
+
+.event-container {
+  background-color: #f2f2ed;
+  padding: 5px;
+  padding-left: 8px;
+  margin-bottom: 2px;
+}
+
+.event-container:hover {
+  background-color: #deded7;
+}
+
+.task-report {
+  display: flex;
+  align-items: center;
+}
+
+.task-report > * {
+  margin-left: 3px;
+  margin-right: 3px;
+  display: flex;
+}
+
+.task-report > :last-child {
+  margin-right: 0;
+}
+
+.task-report > :first-child {
+  margin-left: 0;
+}
+
+
+.http-request > .url {
+  flex: 1;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+
+.delta > * {
+  margin-right: 5px;
+}
+
+.delta > :last-child {
+  margin-right: 0px;
+}
+
+.delta .value-added {
+  color: green;
+}
+
+.delta .value-modified {
+  color: orange;
+}
+
+.delta .value-deleted {
+  color: red;
+}
+
+.method {
+  padding: 5px;
+  border-radius: 2px;
+}
+
+.status-code {
+  padding: 5px;
+  border-radius: 2px;
+  background-color: #aed1be;
+  color: #121212;
+  flex-shrink: 1;
+  display: flex;
+  white-space: nowrap;
+}
+
+.method.post {
+  background-color: #396b3f;
+  color: #f5f7fa;
+}
+
+.method.put {
+  background-color: #996b0f;
+  color: #f5f7fa;
+}
+
+.method.get {
+  background-color: #1c6285;
+  color: #f5f7fa;
+}
+
+.method.delete {
+  background-color: #802629;
+  color: #f5f7fa;
+}
+
