@@ -9,6 +9,7 @@
   padding: 5px;
   overflow: auto;
   height: 100%;
+  width: 100%;
 }
 
 .app__sidebar {
@@ -16,5 +17,6 @@
   width: 500px;
   height: 100vh;
   flex-shrink: 0;
+  border-right: 1px solid rgba(0,0,0,0.15);
 }
 

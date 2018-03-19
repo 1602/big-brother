@@ -8,13 +8,14 @@
 @import './styles/http.css';
 @import './styles/details-block.css';
 
-.state-update section {
-  padding-left: 10px;
+.ray {
+  padding-bottom: 15px;
+  padding-top: 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
 }
 
-.ray {
-  margin-bottom: 20px;
-  border: #eee;
+.ray:last-child {
+  border: 0;
 }
 
 .json-dump {
