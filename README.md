@@ -1,97 +1,31 @@
-<img src="https://circleci.com/gh/simonh1000/elm-webpack-starter.png?circle-token=:circle-token">
+## Big Brother
 
-# Elm 0.18 with Webpack 3, Hot Loading & Bootstrap 4
+Watching pure-ish application, helps to understand state transitions
 
-Elm dev environment with hot-loading (i.e. state is retained as you edit your code - Hot Module Reloading, HMR)). I use this daily for my professional work. Like elm-community/elm-webpack-starter but using Webpack 3.
-
-## Installation
-
-Clone this repo into a new project folder and run install script.
-(I ignore the errors about missing jquery as it is best not to use the Bootstrap jquery-based components with Elm)
-
-With npm
-
-```sh
-$ git clone git@github.com:simonh1000/elm-webpack-starter.git new-project
-$ cd new-project
-$ npm install
-$ npm run dev
-```
-
-With yarn
-```sh
-$ git clone git@github.com:simonh1000/elm-webpack-starter.git new-project
-$ cd new-project
-$ yarn
-$ yarn dev
- ```
-
-Open http://localhost:3000 and start modifying the code in /src.
-(An example using Routing is provided in the `navigation` branch)
-
-## Production
-
-Build production assets with:
-
-```sh
-npm run prod
-```
-
-## Static assets
-
-Just add to `src/assets/` and the production build copies them to `/dist`
-
-## Testing
-
-[Install elm-test globally](https://github.com/elm-community/elm-test#running-tests-locally)
-
-`elm-test init` is run when you install your dependencies. After that all you need to do to run the tests is
+### Installation
 
 ```
-yarn test
+yarn
 ```
 
-Take a look at the examples in `tests/`
+### Developement
 
-If you add dependencies to your main app, then run `elm-test --add-dependencies`
+Run local env
 
-I have also added [elm-verify-examples](https://github.com/stoeffel/elm-verify-examples) and provided an example in the definition of `add1` in App.elm.
-
-<hr />
-
-## ES6
-
-If you need to write some Javascript port code, you need to be aware that `npm run prod` will fail as the uglifyjs plugin provided with Webpack 3 cannot handle ES6. There are a couple of ways forward
-
-- Install and use [Babel](https://babeljs.io/) to transpile to es5 before passing to uglifyjs. I modify the common.module.rules to read:
 ```
-{
-   test: /\.js$/,
-   exclude: /node_modules/,
-   use: {
-       loader: 'babel-loader',
-       options: {
-           presets: ['latest']
-       }
-   }
-}
+yarn run dev
 ```
 
-- Use uglifyjs2/3 (untested) - see https://www.npmjs.com/package/uglifyjs-webpack-plugin
+Build for production
 
-## Credits
+```
+yarn run prod
+```
 
-A long time ago this code was forked from https://github.com/fluxxu/elm-hot-loader
+And deploy
 
-## How it works
+```
+yarn run deploy
+```
 
-"webpack-dev-server --hot --inline --host=0.0.0.0 --port 3000",
 
---hot Enable webpack's Hot Module Replacement feature
---inline (default) a script will be inserted in your bundle to take care of live reloading, and build messages will appear in the browser console.
---host=0.0.0.0 ??
---port 3000 - use port 3000 instead of default 8000
-
-## Changelog
-
- - 1.1.0 - add elm-verify-examples
