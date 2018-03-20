@@ -10,9 +10,10 @@ import JsonValue exposing (JsonValue)
 import View.Icons exposing (mediumIcon)
 import View.App exposing (detailsBlock)
 import Data.Event exposing (Event(..), TaskReport(..))
-import Data.JsonDelta exposing (JsonDelta(..))
+import Data.JsonDiff exposing (JsonDiff(..))
 import Component.JsonViewer
 import View.Task
+import View.JsonDiff
 
 
 type alias Model =
@@ -20,6 +21,7 @@ type alias Model =
     , rays : List String
     , groupedEvents : Dict String (List Event)
     , recordingEnabled : Bool
+    , isConnected : Bool
     , groupByRay : Bool
     , selectedId : Id
     , selectedEvent : Maybe Event
@@ -45,6 +47,7 @@ init =
     , groupedEvents = Dict.empty
     , groupByRay = True
     , recordingEnabled = True
+    , isConnected = False
     , selectedId = ""
     , selectedEvent = Nothing
     , expandedNodes = []
@@ -56,16 +59,22 @@ init =
 port event : (Value -> msg) -> Sub msg
 
 
+port connected : (Bool -> msg) -> Sub msg
+
+
 
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if model.recordingEnabled then
-        event EventReceived
-    else
-        Sub.none
+    Sub.batch
+        [ if model.recordingEnabled && model.isConnected then
+            event EventReceived
+          else
+            Sub.none
+        , connected SetConnectionStatus
+        ]
 
 
 
@@ -74,6 +83,7 @@ subscriptions model =
 
 type Msg
     = EventReceived Value
+    | SetConnectionStatus Bool
     | ToggleRecording
     | SelectEvent Id Event
     | ToggleNode (List String)
@@ -109,6 +119,9 @@ update message model =
                 |> Result.mapError (Debug.log "eventDecoder")
                 |> Result.withDefault (model ! [])
 
+        SetConnectionStatus isConnected ->
+            { model | isConnected = isConnected } ! []
+
         ToggleRecording ->
             { model | recordingEnabled = not model.recordingEnabled } ! []
 
@@ -130,7 +143,7 @@ view : Model -> Html Msg
 view model =
     View.App.layout
         { sidebar =
-            [ controls model.recordingEnabled
+            [ controls model.recordingEnabled model.isConnected
             , if model.groupByRay then
                 raysStream model
               else
@@ -147,7 +160,7 @@ viewEventDetails e expandedNodes =
         TaskEvent _ duration _ tr ->
             View.Task.details duration tr { expandedNodes = expandedNodes, onToggle = ToggleNode }
 
-        StateUpdate _ command state delta message ->
+        StateUpdate _ command state diff message ->
             div [ class "state-update" ]
                 [ detailsBlock ("Message: " ++ message.name)
                     [ h4 [] [ text "payload" ]
@@ -155,8 +168,7 @@ viewEventDetails e expandedNodes =
                     ]
                 , detailsBlock "State Update"
                     [ h4 [] [ text "state ∆" ]
-                    , viewDelta delta [ "delta" ] expandedNodes
-                      -- , div [ class "json-dump" ] [ state |> Encode.encode 4 |> text ]
+                    , diff |> View.JsonDiff.view [ "diff" ] { expandedNodes = expandedNodes, onToggle = ToggleNode }
                     , h4 [] [ text "updated state" ]
                     , state |> viewJsonValue expandedNodes [ "state" ]
                     ]
@@ -166,56 +178,12 @@ viewEventDetails e expandedNodes =
                 ]
 
 
-viewDelta : JsonDelta -> List String -> Component.JsonViewer.ExpandedNodes -> Html Msg
-viewDelta delta path expandedNodes =
-    let
-        jsonViewer x =
-            viewJsonValue expandedNodes path x
-    in
-        case delta of
-            Data.JsonDelta.ObjectDiff props ->
-                props
-                    |> List.map
-                        (\( key, delta ) ->
-                            div []
-                                [ span [ class (classifyChange delta) ] [ key ++ ":" |> text ]
-                                , viewDelta delta (path ++ [ key ]) expandedNodes
-                                ]
-                        )
-                    |> div [ class "delta" ]
-
-            Data.JsonDelta.ValueModified before after ->
-                div []
-                    [ div [ class "delta--deleted" ] [ before |> jsonViewer ]
-                    , div [ class "delta--added" ] [ after |> jsonViewer ]
-                    ]
-
-            Data.JsonDelta.ValueAdded jv ->
-                div [ class "delta--added" ]
-                    [ jv |> jsonViewer
-                    ]
-
-            Data.JsonDelta.ArrayDelta ad ->
-                ad |> jsonViewer
-
-            Data.JsonDelta.JustValue jv ->
-                jv |> jsonViewer
-
-            Data.JsonDelta.ValueDeleted jv ->
-                div [ class "delta--deleted" ]
-                    [ jv |> jsonViewer
-                    ]
-
-            Data.JsonDelta.NoChanges ->
-                text "Nothing changed"
-
-
 viewJsonValue : Component.JsonViewer.ExpandedNodes -> List String -> JsonValue -> Html Msg
 viewJsonValue expandedNodes path =
     Component.JsonViewer.view { expandedNodes = expandedNodes, onToggle = ToggleNode } path
 
 
-dumpValue : JsonDelta -> String
+dumpValue : JsonDiff -> String
 dumpValue delta =
     case delta of
         ValueAdded x ->
@@ -231,16 +199,19 @@ dumpValue delta =
             ""
 
 
-controls : Bool -> Html Msg
-controls recordingEnabled =
+controls : Bool -> Bool -> Html Msg
+controls recordingEnabled isConnected =
     div [ class "controls" ]
-        [ button [ onClick ToggleRecording ]
-            [ text <|
-                if recordingEnabled then
-                    "Pause recording"
-                else
-                    "Resume recording"
-            ]
+        [ if isConnected then
+            button [ onClick ToggleRecording ]
+                [ text <|
+                    if recordingEnabled then
+                        "Pause recording"
+                    else
+                        "Resume recording"
+                ]
+          else
+            text "Disconnected from localhost:8989"
         ]
 
 
@@ -321,27 +292,11 @@ viewEvent selectedId e =
                 [ FeatherIcons.activity |> mediumIcon
                 , span [] [ text msg.name ]
                 , case diff of
-                    Data.JsonDelta.ObjectDiff props ->
+                    Data.JsonDiff.ObjectDiff props ->
                         props
-                            |> List.map (\( key, delta ) -> span [ class (classifyChange delta) ] [ text key ])
+                            |> List.map (\( key, diff ) -> span [ class (View.JsonDiff.classifyChange diff) ] [ text key ])
                             |> span [ class "delta" ]
 
                     _ ->
                         text ""
                 ]
-
-
-classifyChange : JsonDelta -> String
-classifyChange delta =
-    case delta of
-        ValueAdded _ ->
-            "delta__key delta__key--added"
-
-        ValueModified _ _ ->
-            "delta__key delta__key--modified"
-
-        ValueDeleted _ ->
-            "delta__key delta__key--deleted"
-
-        _ ->
-            "delta__key"

@@ -2,7 +2,7 @@ module Data.Event exposing (Event(..), TaskReport(..), decoder)
 
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode as Encode
-import Data.JsonDelta exposing (JsonDelta)
+import Data.JsonDiff exposing (JsonDiff)
 import JsonValue exposing (JsonValue)
 import Data.Http
 import Time exposing (Time)
@@ -19,7 +19,7 @@ type alias Id =
 
 
 type Event
-    = StateUpdate Id JsonValue JsonValue JsonDelta Message
+    = StateUpdate Id JsonValue JsonValue JsonDiff Message
     | TaskEvent Id Int Bool TaskReport
 
 
@@ -42,7 +42,7 @@ stateUpdateDecoder =
         (Decode.field "id" Decode.string)
         (Decode.field "cmd" JsonValue.decoder)
         (Decode.field "state" JsonValue.decoder)
-        (Decode.field "delta" Data.JsonDelta.decoder)
+        (Decode.field "diff" Data.JsonDiff.decoder)
         (Decode.field "msg" messageDecoder)
 
 

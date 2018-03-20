@@ -1,11 +1,11 @@
-module Data.JsonDelta exposing (JsonDelta(..), decoder)
+module Data.JsonDiff exposing (JsonDiff(..), decoder)
 
 import Json.Decode as Decode exposing (Decoder)
 import JsonValue exposing (JsonValue)
 
 
-type JsonDelta
-    = ObjectDiff (List ( String, JsonDelta ))
+type JsonDiff
+    = ObjectDiff (List ( String, JsonDiff ))
     | ValueAdded JsonValue
     | ValueModified JsonValue JsonValue
     | ValueDeleted JsonValue
@@ -14,7 +14,7 @@ type JsonDelta
     | JustValue JsonValue
 
 
-decoder : Decoder JsonDelta
+decoder : Decoder JsonDiff
 decoder =
     Decode.oneOf
         [ Decode.field "_t" Decode.string
@@ -47,7 +47,7 @@ decoder =
                                 |> Decode.succeed
 
                         _ ->
-                            Decode.fail "Not a delta"
+                            Decode.fail "Not a json diff"
                 )
         , JsonValue.decoder |> Decode.map JustValue
         ]
