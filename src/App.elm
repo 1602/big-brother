@@ -86,6 +86,7 @@ type Msg
     | SetConnectionStatus Bool
     | ToggleRecording
     | SelectEvent Id Event
+    | PurgeEvents
     | ToggleNode (List String)
 
 
@@ -128,6 +129,15 @@ update message model =
         SelectEvent id event ->
             { model | selectedId = id, selectedEvent = Just event, expandedNodes = [] } ! []
 
+        PurgeEvents ->
+            { model
+                | events = []
+                , selectedEvent = Nothing
+                , rays = []
+                , groupedEvents = Dict.empty
+            }
+                ! []
+
         ToggleNode path ->
             { model
                 | expandedNodes = model.expandedNodes |> Component.JsonViewer.toggle path
@@ -143,7 +153,7 @@ view : Model -> Html Msg
 view model =
     View.App.layout
         { sidebar =
-            [ controls model.recordingEnabled model.isConnected
+            [ controls model
             , if model.groupByRay then
                 raysStream model
               else
@@ -199,19 +209,23 @@ dumpValue delta =
             ""
 
 
-controls : Bool -> Bool -> Html Msg
-controls recordingEnabled isConnected =
+controls : Model -> Html Msg
+controls model =
     div [ class "controls" ]
-        [ if isConnected then
-            button [ onClick ToggleRecording ]
+        [ if model.isConnected then
+            button [ class "button", onClick ToggleRecording ]
                 [ text <|
-                    if recordingEnabled then
+                    if model.recordingEnabled then
                         "Pause recording"
                     else
                         "Resume recording"
                 ]
           else
             text "Disconnected from localhost:8989"
+        , if List.isEmpty model.events then
+            text ""
+          else
+            button [ class "button", onClick <| PurgeEvents ] [ text "Purge log" ]
         ]
 
 
