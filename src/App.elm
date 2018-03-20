@@ -5,14 +5,10 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as Decode exposing (Decoder, Value, decodeValue)
-import Json.Encode as Encode
 import FeatherIcons
-import Date
-import Strftime
 import JsonValue exposing (JsonValue)
 import View.Icons exposing (mediumIcon)
-import View.App
-import View.Http
+import View.App exposing (detailsBlock)
 import Data.Event exposing (Event(..), TaskReport(..))
 import Data.JsonDelta exposing (JsonDelta(..))
 import Component.JsonViewer
@@ -149,7 +145,7 @@ viewEventDetails : Event -> Component.JsonViewer.ExpandedNodes -> Html Msg
 viewEventDetails e expandedNodes =
     case e of
         TaskEvent _ duration _ tr ->
-            viewTaskDetails duration tr expandedNodes
+            View.Task.details duration tr { expandedNodes = expandedNodes, onToggle = ToggleNode }
 
         StateUpdate _ command state delta message ->
             div [ class "state-update" ]
@@ -215,8 +211,8 @@ viewDelta delta path expandedNodes =
 
 
 viewJsonValue : Component.JsonViewer.ExpandedNodes -> List String -> JsonValue -> Html Msg
-viewJsonValue expandedNodes path jv =
-    Component.JsonViewer.view jv path expandedNodes ToggleNode
+viewJsonValue expandedNodes path =
+    Component.JsonViewer.view { expandedNodes = expandedNodes, onToggle = ToggleNode } path
 
 
 dumpValue : JsonDelta -> String
@@ -233,99 +229,6 @@ dumpValue delta =
 
         _ ->
             ""
-
-
-detailsBlock : String -> List (Html msg) -> Html msg
-detailsBlock header content =
-    div [ class "details-block" ]
-        [ h3 [ class "details-block__header" ] [ text header ]
-        , section [ class "details-block__content" ] content
-        ]
-
-
-viewTaskDetails : Int -> TaskReport -> Component.JsonViewer.ExpandedNodes -> Html Msg
-viewTaskDetails duration tr expandedNodes =
-    case tr of
-        HttpRequest http ->
-            div [ class "http" ]
-                [ detailsBlock "Request"
-                    [ div [ class "task-report http-request" ]
-                        [ span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
-                        , span [ class "url" ] [ http.request.url |> text ]
-                        ]
-                    , h4 [] [ text "Headers" ]
-                    , http.request.headers
-                        |> List.map
-                            (\( header, value ) ->
-                                div []
-                                    [ span [ class "http__header-name" ] [ text header ]
-                                    , span [ class "http__header-value" ] [ value |> text ]
-                                    ]
-                            )
-                        |> div []
-                    , h4 [] [ text "Body" ]
-                    , div []
-                        [ http.request.data
-                            |> Maybe.map (viewJsonValue expandedNodes [ "requestBody" ])
-                            |> Maybe.withDefault ("Ø" |> text)
-                        ]
-                    ]
-                , detailsBlock "Response" <|
-                    case http.response of
-                        Just response ->
-                            [ div []
-                                [ View.Http.statusCodeBadge response.status
-                                , span [] [ " " ++ response.status.text |> text ]
-                                ]
-                            , h4 [] [ text "Headers" ]
-                            , response.headers
-                                |> List.map
-                                    (\( header, values ) ->
-                                        div []
-                                            [ span [ class "http__header-name" ] [ text header ]
-                                            , span [ class "http__header-value" ] [ values |> String.join ", " |> text ]
-                                            ]
-                                    )
-                                |> div []
-                            , h4 [] [ text "Body" ]
-                            , response.body |> Maybe.map (viewJsonValue expandedNodes [ "responseBody" ]) |> Maybe.withDefault (text "Ø")
-                            ]
-
-                        Nothing ->
-                            case http.error of
-                                Just error ->
-                                    [ h4 [] [ text "Error" ]
-                                    , div []
-                                        [ error |> viewJsonValue expandedNodes []
-                                        ]
-                                    ]
-
-                                Nothing ->
-                                    [ text "In progress, perhaps" ]
-                , detailsBlock "Duration" <|
-                    [ toString duration ++ "ms" |> text
-                    ]
-                ]
-
-        CurrentTime x ->
-            div [ class "task-report" ]
-                [ FeatherIcons.clock |> mediumIcon
-                , span [] [ Strftime.format "%B %d %Y, %-I:%M:%S" (Date.fromTime x) |> text ]
-                ]
-
-        FailTask err ->
-            div [ class "task-report" ]
-                [ FeatherIcons.thumbsDown |> mediumIcon
-                , span [] [ err |> toString |> text ]
-                ]
-
-        SucceedTask data ->
-            div [ class "task-report" ]
-                [ span [ class "json-dump" ] [ data |> Encode.encode 4 |> text ]
-                ]
-
-        UnknownTask x ->
-            x |> toString |> text
 
 
 controls : Bool -> Html Msg

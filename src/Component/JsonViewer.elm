@@ -1,4 +1,4 @@
-module Component.JsonViewer exposing (ExpandedNodes, view, toggle)
+module Component.JsonViewer exposing (JsonViewer, ExpandedNodes, view, toggle)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -10,6 +10,12 @@ type alias ExpandedNodes =
     List (List String)
 
 
+type alias JsonViewer msg =
+    { expandedNodes : ExpandedNodes
+    , onToggle : List String -> msg
+    }
+
+
 toggle : List String -> ExpandedNodes -> ExpandedNodes
 toggle path expandedNodes =
     if List.member path expandedNodes then
@@ -18,8 +24,8 @@ toggle path expandedNodes =
         path :: expandedNodes
 
 
-view : JsonValue -> List String -> ExpandedNodes -> (List String -> msg) -> Html msg
-view jv path expandedNodes onToggle =
+view : JsonViewer msg -> List String -> JsonValue -> Html msg
+view jvr path jv =
     case jv of
         JsonValue.BoolValue bv ->
             span [ class "json-value json-value--bool" ]
@@ -40,13 +46,13 @@ view jv path expandedNodes onToggle =
             span [ class "json-value json-value--null" ] [ text "null" ]
 
         JsonValue.ObjectValue props ->
-            if List.member path expandedNodes then
+            if List.member path jvr.expandedNodes then
                 props
                     |> List.map
                         (\( k, v ) ->
                             div [ class "json-value json-value__object-property" ]
                                 [ span [ class "json-value json-value__key" ] [ text k ]
-                                , view v (path ++ [ k ]) expandedNodes onToggle
+                                , v |> view jvr (path ++ [ k ])
                                 ]
                         )
                     |> div [ class "json-value json-value--expandable" ]
@@ -55,23 +61,23 @@ view jv path expandedNodes onToggle =
                     |> List.take 5
                     |> List.map (\( k, _ ) -> k)
                     |> String.join ", "
-                    |> (\s -> span [ class "json-value json-value--collapsed", onClick <| onToggle path ] [ "{ " ++ s ++ "... }" |> text ])
+                    |> (\s -> span [ class "json-value json-value--collapsed", onClick <| jvr.onToggle path ] [ "{ " ++ s ++ "... }" |> text ])
 
         JsonValue.ArrayValue items ->
-            if List.member path expandedNodes then
+            if List.member path jvr.expandedNodes then
                 items
                     |> List.indexedMap
                         (\index v ->
                             div []
                                 [ span [ class "json-value json-value__key" ] [ toString index |> text ]
-                                , view v (path ++ [ toString index ]) expandedNodes onToggle
+                                , v |> view jvr (path ++ [ toString index ])
                                 ]
                         )
                     |> div [ class "json-value json-value--expandable" ]
             else
                 span
                     [ class "json-value json-value--collapsed"
-                    , onClick <| onToggle path
+                    , onClick <| jvr.onToggle path
                     ]
                     [ "[ " ++ (List.length items |> toString) ++ " items... ]" |> text
                     ]
