@@ -12,6 +12,9 @@ import Date
 import Strftime
 import JsonValue exposing (JsonValue)
 import Icons
+import Views.App
+import Views.Http
+import Data.Http
 
 
 type alias Model =
@@ -49,22 +52,7 @@ type alias Message =
 
 
 type TaskReport
-    = HttpRequest
-        { request :
-            { url : String
-            , method : String
-            , data : Maybe JsonValue
-            , headers : List ( String, String )
-            }
-        , response :
-            Maybe
-                { status : { ok : Bool, code : Int, text : String }
-                , headers : List ( String, List String )
-                , error : Maybe JsonValue
-                , body : Maybe JsonValue
-                }
-        , error : Maybe JsonValue
-        }
+    = HttpRequest Data.Http.HttpClientTransaction
     | FailTask Value
     | SucceedTask Value
     | CurrentTime Time
@@ -152,7 +140,7 @@ taskDecoder =
 taskReportDecoder : Decoder TaskReport
 taskReportDecoder =
     Decode.oneOf
-        [ httpRequestDecoder
+        [ Data.Http.decoder |> Decode.map HttpRequest
         , currentTimeTaskDecoder
         , failSucceedTaskDecoder
         , Decode.value |> Decode.map UnknownTask
@@ -185,35 +173,6 @@ currentTimeTaskDecoder =
                         Decode.fail "Not a current time task"
                 )
         )
-
-
-httpRequestDecoder : Decoder TaskReport
-httpRequestDecoder =
-    Decode.map3 (\req res err -> HttpRequest { request = req, response = res, error = err })
-        (Decode.field "spec"
-            (Decode.map4 (\url method headers data -> { url = url, method = method, headers = headers, data = data })
-                (Decode.field "url" Decode.string)
-                (Decode.field "method" Decode.string)
-                (Decode.field "headers" (Decode.keyValuePairs Decode.string))
-                (Decode.field "data" JsonValue.decoder |> Decode.maybe)
-            )
-        )
-        (Decode.at [ "result", "data" ]
-            (Decode.map4 (\status headers error body -> { status = status, headers = headers, error = error, body = body })
-                (Decode.field "status"
-                    (Decode.map3 (\ok code text -> { ok = ok, code = code, text = text })
-                        (Decode.field "ok" Decode.bool)
-                        (Decode.field "code" Decode.int)
-                        (Decode.field "text" Decode.string)
-                    )
-                )
-                (Decode.field "headers" (Decode.keyValuePairs (Decode.list Decode.string)))
-                (Decode.field "error" JsonValue.decoder |> Decode.maybe)
-                (Decode.field "body" JsonValue.decoder |> Decode.maybe)
-            )
-            |> Decode.maybe
-        )
-        (Decode.at [ "result", "error" ] JsonValue.decoder |> Decode.maybe)
 
 
 init : ( Model, Cmd Msg )
@@ -310,17 +269,17 @@ update message model =
 
 view : Model -> Html Msg
 view model =
-    div [ class "app__container" ]
-        [ div [ class "app__sidebar" ]
+    Views.App.layout
+        { sidebar =
             [ controls model.recordingEnabled
             , if model.groupByRay then
                 raysStream model
               else
                 eventsStream model.selectedId model.filter model.events
             ]
-        , div [ class "app__content" ]
+        , content =
             [ model.selectedEvent |> Maybe.map (\e -> viewEventDetails e model.expandedNodes) |> Maybe.withDefault (text "") ]
-        ]
+        }
 
 
 viewEventDetails : Event -> List (List String) -> Html Msg
@@ -502,17 +461,7 @@ viewTaskDetails duration tr expandedNodes =
                     case http.response of
                         Just response ->
                             [ div []
-                                [ span
-                                    [ classList
-                                        [ ( "badge", True )
-                                        , ( "badge--success", response.status.ok )
-                                        , ( "badge--failure", not response.status.ok )
-                                        ]
-                                    ]
-                                    [ response.status.code
-                                        |> toString
-                                        |> text
-                                    ]
+                                [ Views.Http.statusCodeBadge response.status
                                 , span [] [ " " ++ response.status.text |> text ]
                                 ]
                             , h4 [] [ text "Headers" ]
