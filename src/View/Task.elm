@@ -39,7 +39,12 @@ preview task =
         FailTask err ->
             div [ class "task-report" ]
                 [ FeatherIcons.thumbsDown |> mediumIcon
-                , span [] [ err |> toString |> text ]
+                , case err of
+                    Data.Event.ObjectWithMessage { message } ->
+                        span [] [ message |> text ]
+
+                    _ ->
+                        text "Misc error"
                 ]
 
         SucceedTask data ->
@@ -123,10 +128,16 @@ details duration tr jsonViewer =
                 ]
 
         FailTask err ->
-            div [ class "task-report" ]
-                [ FeatherIcons.thumbsDown |> mediumIcon
-                , span [] [ err |> toString |> text ]
-                ]
+            detailsBlock "Error" <|
+                case err of
+                    Data.Event.ObjectWithMessage { message, error } ->
+                        [ h4 [] [ text message ]
+                        , error |> viewJsonValue jsonViewer [ "error" ]
+                        ]
+
+                    Data.Event.Unformatted error ->
+                        [ error |> viewJsonValue jsonViewer [ "error" ]
+                        ]
 
         SucceedTask data ->
             div [ class "task-report" ]

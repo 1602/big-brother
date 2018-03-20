@@ -1,4 +1,4 @@
-module Data.Event exposing (Event(..), TaskReport(..), decoder)
+module Data.Event exposing (Event(..), TaskReport(..), ErrorObject(..), decoder)
 
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode as Encode
@@ -23,9 +23,14 @@ type Event
     | TaskEvent Id Int Bool TaskReport
 
 
+type ErrorObject
+    = ObjectWithMessage { message : String, error : JsonValue }
+    | Unformatted JsonValue
+
+
 type TaskReport
     = HttpRequest Data.Http.HttpClientTransaction
-    | FailTask Value
+    | FailTask ErrorObject
     | SucceedTask Value
     | CurrentTime Time
     | UnknownTask Value
@@ -78,11 +83,28 @@ failSucceedTaskDecoder =
         |> Decode.andThen
             (\task ->
                 if task == "fail" then
-                    Decode.map FailTask (Decode.at [ "spec", "error" ] Decode.value)
+                    Decode.map FailTask (Decode.at [ "spec", "error" ] errorObjectDecoder)
                 else if task == "succeed" then
                     Decode.map SucceedTask (Decode.at [ "spec", "data" ] Decode.value |> Decode.maybe |> Decode.map (Maybe.withDefault Encode.null))
                 else
                     Decode.fail "Doesn't look like fail task"
+            )
+
+
+errorObjectDecoder : Decoder ErrorObject
+errorObjectDecoder =
+    Decode.oneOf
+        [ errorWithMessageDecoder
+        , JsonValue.decoder |> Decode.map Unformatted
+        ]
+
+
+errorWithMessageDecoder : Decoder ErrorObject
+errorWithMessageDecoder =
+    Decode.field "message" Decode.string
+        |> Decode.andThen
+            (\message ->
+                JsonValue.decoder |> Decode.map (\jv -> ObjectWithMessage { message = message, error = jv })
             )
 
 

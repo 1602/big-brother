@@ -42,6 +42,7 @@
   padding: 5px;
   padding-left: 8px;
   margin-bottom: 2px;
+  width: 100%;
 }
 
 .event-container:hover {
@@ -51,6 +52,7 @@
 .task-report {
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .task-report > * {
@@ -73,6 +75,12 @@
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block !important;
+}
+
+svg {
+  flex-shrink: 0
 }
 
 .method {
