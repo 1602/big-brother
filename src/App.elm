@@ -6,15 +6,16 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as Decode exposing (Decoder, Value, decodeValue)
 import Json.Encode as Encode
-import Time exposing (Time)
 import FeatherIcons
 import Date
 import Strftime
 import JsonValue exposing (JsonValue)
 import Icons
-import Views.App
-import Views.Http
-import Data.Http
+import View.App
+import View.Http
+import Data.Event exposing (Event(..), TaskReport(..))
+import Data.JsonDelta exposing (JsonDelta(..))
+import Component.JsonViewer
 
 
 type alias Model =
@@ -38,141 +39,6 @@ type alias Filter =
     { succeed : Bool
     , fail : Bool
     }
-
-
-type Event
-    = StateUpdate Id JsonValue JsonValue JsonDelta Message
-    | TaskEvent Id Int Bool TaskReport
-
-
-type alias Message =
-    { name : String
-    , payload : JsonValue
-    }
-
-
-type TaskReport
-    = HttpRequest Data.Http.HttpClientTransaction
-    | FailTask Value
-    | SucceedTask Value
-    | CurrentTime Time
-    | UnknownTask Value
-
-
-type JsonDelta
-    = ObjectDiff (List ( String, JsonDelta ))
-    | ValueAdded JsonValue
-    | ValueModified JsonValue JsonValue
-    | ValueDeleted JsonValue
-    | NoChanges
-    | ArrayDelta JsonValue
-    | JustValue JsonValue
-
-
-deltaDecoder : Decoder JsonDelta
-deltaDecoder =
-    Decode.oneOf
-        [ Decode.field "_t" Decode.string
-            |> Decode.andThen
-                (\s ->
-                    if s == "a" then
-                        Decode.map ArrayDelta JsonValue.decoder
-                    else
-                        JsonValue.decoder |> Decode.map JustValue
-                )
-        , Decode.keyValuePairs (Decode.lazy (\_ -> deltaDecoder)) |> Decode.map ObjectDiff
-        , Decode.list JsonValue.decoder
-            |> Decode.andThen
-                (\list ->
-                    case list of
-                        [] ->
-                            NoChanges
-                                |> Decode.succeed
-
-                        [ newValue ] ->
-                            ValueAdded newValue
-                                |> Decode.succeed
-
-                        [ oldValue, newValue ] ->
-                            ValueModified oldValue newValue
-                                |> Decode.succeed
-
-                        [ oldValue, _, _ ] ->
-                            ValueDeleted oldValue
-                                |> Decode.succeed
-
-                        _ ->
-                            Decode.fail "Not a delta"
-                )
-        , JsonValue.decoder |> Decode.map JustValue
-        ]
-
-
-eventDecoder : Decoder Event
-eventDecoder =
-    Decode.oneOf [ stateUpdateDecoder, taskDecoder ]
-
-
-stateUpdateDecoder : Decoder Event
-stateUpdateDecoder =
-    Decode.map5 StateUpdate
-        (Decode.field "id" Decode.string)
-        (Decode.field "cmd" JsonValue.decoder)
-        (Decode.field "state" JsonValue.decoder)
-        (Decode.field "delta" deltaDecoder)
-        (Decode.field "msg"
-            (Decode.map2 Message
-                (Decode.field "name" Decode.string)
-                (Decode.field "payload" JsonValue.decoder)
-            )
-        )
-
-
-taskDecoder : Decoder Event
-taskDecoder =
-    Decode.map4 TaskEvent
-        (Decode.field "id" Decode.string)
-        (Decode.field "duration" Decode.int)
-        (Decode.at [ "result", "result" ] (Decode.string |> Decode.map ((==) "success")))
-        taskReportDecoder
-
-
-taskReportDecoder : Decoder TaskReport
-taskReportDecoder =
-    Decode.oneOf
-        [ Data.Http.decoder |> Decode.map HttpRequest
-        , currentTimeTaskDecoder
-        , failSucceedTaskDecoder
-        , Decode.value |> Decode.map UnknownTask
-        ]
-
-
-failSucceedTaskDecoder : Decoder TaskReport
-failSucceedTaskDecoder =
-    Decode.at [ "spec", "task" ] Decode.string
-        |> Decode.andThen
-            (\task ->
-                if task == "fail" then
-                    Decode.map FailTask (Decode.at [ "spec", "error" ] Decode.value)
-                else if task == "succeed" then
-                    Decode.map SucceedTask (Decode.at [ "spec", "data" ] Decode.value |> Decode.maybe |> Decode.map (Maybe.withDefault Encode.null))
-                else
-                    Decode.fail "Doesn't look like fail task"
-            )
-
-
-currentTimeTaskDecoder : Decoder TaskReport
-currentTimeTaskDecoder =
-    Decode.map CurrentTime
-        (Decode.field "spec" Decode.string
-            |> Decode.andThen
-                (\s ->
-                    if s == "time" then
-                        Decode.at [ "result", "data" ] Decode.float
-                    else
-                        Decode.fail "Not a current time task"
-                )
-        )
 
 
 init : ( Model, Cmd Msg )
@@ -220,7 +86,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update message model =
     case message of
         EventReceived event ->
-            decodeValue eventDecoder event
+            decodeValue Data.Event.decoder event
                 |> Result.map2
                     (\rayId e ->
                         { model
@@ -254,11 +120,7 @@ update message model =
 
         ToggleNode path ->
             { model
-                | expandedNodes =
-                    if List.member path model.expandedNodes then
-                        model.expandedNodes |> List.filter ((/=) path)
-                    else
-                        path :: model.expandedNodes
+                | expandedNodes = model.expandedNodes |> Component.JsonViewer.toggle path
             }
                 ! []
 
@@ -310,7 +172,7 @@ viewEventDetails e expandedNodes =
 viewDelta : JsonDelta -> List String -> List (List String) -> Html Msg
 viewDelta delta path expandedNodes =
     case delta of
-        ObjectDiff props ->
+        Data.JsonDelta.ObjectDiff props ->
             props
                 |> List.map
                     (\( key, delta ) ->
@@ -321,89 +183,35 @@ viewDelta delta path expandedNodes =
                     )
                 |> div [ class "delta" ]
 
-        ValueModified before after ->
+        Data.JsonDelta.ValueModified before after ->
             div []
                 [ div [ class "delta--deleted" ] [ viewJsonValue before path expandedNodes ]
                 , div [ class "delta--added" ] [ viewJsonValue after path expandedNodes ]
                 ]
 
-        ValueAdded jv ->
+        Data.JsonDelta.ValueAdded jv ->
             div [ class "delta--added" ]
                 [ viewJsonValue jv path expandedNodes
                 ]
 
-        ArrayDelta ad ->
+        Data.JsonDelta.ArrayDelta ad ->
             viewJsonValue ad path expandedNodes
 
-        JustValue jv ->
+        Data.JsonDelta.JustValue jv ->
             viewJsonValue jv path expandedNodes
 
-        ValueDeleted jv ->
+        Data.JsonDelta.ValueDeleted jv ->
             div [ class "delta--deleted" ]
                 [ viewJsonValue jv path expandedNodes
                 ]
 
-        NoChanges ->
+        Data.JsonDelta.NoChanges ->
             text "Nothing changed"
 
 
 viewJsonValue : JsonValue -> List String -> List (List String) -> Html Msg
 viewJsonValue jv path expandedNodes =
-    case jv of
-        JsonValue.BoolValue bv ->
-            span [ class "json-value json-value--bool" ]
-                [ text <|
-                    if bv then
-                        "true"
-                    else
-                        "false"
-                ]
-
-        JsonValue.NumericValue nv ->
-            span [ class "json-value json-value--number" ] [ nv |> toString |> text ]
-
-        JsonValue.StringValue sv ->
-            span [ class "json-value json-value--string" ] [ sv |> toString |> text ]
-
-        JsonValue.NullValue ->
-            span [ class "json-value json-value--null" ] [ text "null" ]
-
-        JsonValue.ObjectValue props ->
-            if List.member path expandedNodes then
-                props
-                    |> List.map
-                        (\( k, v ) ->
-                            div [ class "json-value json-value__object-property" ]
-                                [ span [ class "json-value json-value__key" ] [ text k ]
-                                , viewJsonValue v (path ++ [ k ]) expandedNodes
-                                ]
-                        )
-                    |> div [ class "json-value json-value--expandable" ]
-            else
-                props
-                    |> List.take 5
-                    |> List.map (\( k, _ ) -> k)
-                    |> String.join ", "
-                    |> (\s -> span [ class "json-value json-value--collapsed", onClick <| ToggleNode path ] [ "{ " ++ s ++ "... }" |> text ])
-
-        JsonValue.ArrayValue items ->
-            if List.member path expandedNodes then
-                items
-                    |> List.indexedMap
-                        (\index v ->
-                            div []
-                                [ span [ class "json-value json-value__key" ] [ toString index |> text ]
-                                , viewJsonValue v (path ++ [ toString index ]) expandedNodes
-                                ]
-                        )
-                    |> div [ class "json-value json-value--expandable" ]
-            else
-                span
-                    [ class "json-value json-value--collapsed"
-                    , onClick <| ToggleNode path
-                    ]
-                    [ "[ " ++ (List.length items |> toString) ++ " items... ]" |> text
-                    ]
+    Component.JsonViewer.view jv path expandedNodes ToggleNode
 
 
 dumpValue : JsonDelta -> String
@@ -575,7 +383,7 @@ applyFilter filter event =
 viewEvent : Id -> Event -> Html Msg
 viewEvent selectedId e =
     case e of
-        TaskEvent id duration isSuccess task ->
+        Data.Event.TaskEvent id duration isSuccess task ->
             div
                 [ classList
                     [ ( "event-container", True )
@@ -591,7 +399,7 @@ viewEvent selectedId e =
                   --, span [] [ text (toString duration) ]
                 ]
 
-        StateUpdate id _ state diff msg ->
+        Data.Event.StateUpdate id _ state diff msg ->
             div
                 [ classList
                     [ ( "event-container", True )
@@ -605,7 +413,7 @@ viewEvent selectedId e =
                 [ FeatherIcons.activity |> FeatherIcons.withSize 18 |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.toHtml []
                 , span [] [ text msg.name ]
                 , case diff of
-                    ObjectDiff props ->
+                    Data.JsonDelta.ObjectDiff props ->
                         props
                             |> List.map (\( key, delta ) -> span [ class (classifyChange delta) ] [ text key ])
                             |> span [ class "delta" ]
@@ -631,7 +439,7 @@ classifyChange delta =
             "delta__key"
 
 
-viewTask : TaskReport -> Html Msg
+viewTask : Data.Event.TaskReport -> Html Msg
 viewTask task =
     case task of
         HttpRequest http ->
