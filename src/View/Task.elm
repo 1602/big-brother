@@ -24,7 +24,7 @@ preview task =
                 , span [ class "url" ] [ http.request.url |> text ]
                 , case http.response of
                     Just res ->
-                        span [ class "status-code" ] [ res.status.code |> toString |> text ]
+                        View.Http.statusCodeBadge res.status
 
                     Nothing ->
                         text ""
