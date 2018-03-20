@@ -16,6 +16,7 @@ import View.Http
 import Data.Event exposing (Event(..), TaskReport(..))
 import Data.JsonDelta exposing (JsonDelta(..))
 import Component.JsonViewer
+import View.Task
 
 
 type alias Model =
@@ -399,7 +400,7 @@ viewEvent selectedId e =
                 , onClick <| SelectEvent id e
                 ]
                 --[ duration |> toString |> text
-                [ viewTask task
+                [ View.Task.preview task
                   --, span [] [ text (toString duration) ]
                 ]
 
@@ -441,41 +442,3 @@ classifyChange delta =
 
         _ ->
             "delta__key"
-
-
-viewTask : Data.Event.TaskReport -> Html Msg
-viewTask task =
-    case task of
-        HttpRequest http ->
-            div [ class "task-report http-request" ]
-                [ View.Icons.send
-                , span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
-                , span [ class "url" ] [ http.request.url |> text ]
-                , case http.response of
-                    Just res ->
-                        span [ class "status-code" ] [ res.status.code |> toString |> text ]
-
-                    Nothing ->
-                        text ""
-                ]
-
-        CurrentTime x ->
-            div [ class "task-report" ]
-                [ FeatherIcons.clock |> mediumIcon
-                , span [] [ Strftime.format "%B %d %Y, %H:%M:%S" (Date.fromTime x) |> text ]
-                ]
-
-        FailTask err ->
-            div [ class "task-report" ]
-                [ FeatherIcons.thumbsDown |> mediumIcon
-                , span [] [ err |> toString |> text ]
-                ]
-
-        SucceedTask data ->
-            div [ class "task-report" ]
-                [ FeatherIcons.thumbsUp |> mediumIcon
-                  --, span [ class "json-dump" ] [ data |> Encode.encode 4 |> text ]
-                ]
-
-        x ->
-            x |> toString |> text
