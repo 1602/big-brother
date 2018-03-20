@@ -2,18 +2,19 @@ module View.Http exposing (statusCodeBadge)
 
 import Html exposing (Html, span, text)
 import Html.Attributes exposing (classList)
+import Data.Http exposing (Status)
 
 
-statusCodeBadge : { ok : Bool, code : Int, text : String } -> Html msg
-statusCodeBadge status =
+statusCodeBadge : Status -> Html msg
+statusCodeBadge { ok, code } =
     span
         [ classList
             [ ( "badge", True )
-            , ( "badge--success", status.ok )
-            , ( "badge--failure", not status.ok )
+            , ( "badge--success", ok )
+            , ( "badge--failure", not ok )
             ]
         ]
-        [ status.code
+        [ code
             |> toString
             |> text
         ]

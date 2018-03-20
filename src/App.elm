@@ -10,7 +10,7 @@ import FeatherIcons
 import Date
 import Strftime
 import JsonValue exposing (JsonValue)
-import Icons
+import View.Icons exposing (mediumIcon)
 import View.App
 import View.Http
 import Data.Event exposing (Event(..), TaskReport(..))
@@ -26,7 +26,7 @@ type alias Model =
     , groupByRay : Bool
     , selectedId : Id
     , selectedEvent : Maybe Event
-    , expandedNodes : List (List String)
+    , expandedNodes : Component.JsonViewer.ExpandedNodes
     , filter : Filter
     }
 
@@ -144,7 +144,7 @@ view model =
         }
 
 
-viewEventDetails : Event -> List (List String) -> Html Msg
+viewEventDetails : Event -> Component.JsonViewer.ExpandedNodes -> Html Msg
 viewEventDetails e expandedNodes =
     case e of
         TaskEvent _ duration _ tr ->
@@ -154,63 +154,67 @@ viewEventDetails e expandedNodes =
             div [ class "state-update" ]
                 [ detailsBlock ("Message: " ++ message.name)
                     [ h4 [] [ text "payload" ]
-                    , viewJsonValue message.payload [ "payload" ] ([ "payload" ] :: expandedNodes)
+                    , message.payload |> viewJsonValue ([ "payload" ] :: expandedNodes) [ "payload" ]
                     ]
                 , detailsBlock "State Update"
                     [ h4 [] [ text "state ∆" ]
                     , viewDelta delta [ "delta" ] expandedNodes
                       -- , div [ class "json-dump" ] [ state |> Encode.encode 4 |> text ]
                     , h4 [] [ text "updated state" ]
-                    , viewJsonValue state [ "state" ] expandedNodes
+                    , state |> viewJsonValue expandedNodes [ "state" ]
                     ]
                 , detailsBlock "Command"
-                    [ viewJsonValue command [ "command" ] ([ "command" ] :: expandedNodes)
+                    [ command |> viewJsonValue ([ "command" ] :: expandedNodes) [ "command" ]
                     ]
                 ]
 
 
-viewDelta : JsonDelta -> List String -> List (List String) -> Html Msg
+viewDelta : JsonDelta -> List String -> Component.JsonViewer.ExpandedNodes -> Html Msg
 viewDelta delta path expandedNodes =
-    case delta of
-        Data.JsonDelta.ObjectDiff props ->
-            props
-                |> List.map
-                    (\( key, delta ) ->
-                        div []
-                            [ span [ class (classifyChange delta) ] [ key ++ ":" |> text ]
-                            , viewDelta delta (path ++ [ key ]) expandedNodes
-                            ]
-                    )
-                |> div [ class "delta" ]
+    let
+        jsonViewer x =
+            viewJsonValue expandedNodes path x
+    in
+        case delta of
+            Data.JsonDelta.ObjectDiff props ->
+                props
+                    |> List.map
+                        (\( key, delta ) ->
+                            div []
+                                [ span [ class (classifyChange delta) ] [ key ++ ":" |> text ]
+                                , viewDelta delta (path ++ [ key ]) expandedNodes
+                                ]
+                        )
+                    |> div [ class "delta" ]
 
-        Data.JsonDelta.ValueModified before after ->
-            div []
-                [ div [ class "delta--deleted" ] [ viewJsonValue before path expandedNodes ]
-                , div [ class "delta--added" ] [ viewJsonValue after path expandedNodes ]
-                ]
+            Data.JsonDelta.ValueModified before after ->
+                div []
+                    [ div [ class "delta--deleted" ] [ before |> jsonViewer ]
+                    , div [ class "delta--added" ] [ after |> jsonViewer ]
+                    ]
 
-        Data.JsonDelta.ValueAdded jv ->
-            div [ class "delta--added" ]
-                [ viewJsonValue jv path expandedNodes
-                ]
+            Data.JsonDelta.ValueAdded jv ->
+                div [ class "delta--added" ]
+                    [ jv |> jsonViewer
+                    ]
 
-        Data.JsonDelta.ArrayDelta ad ->
-            viewJsonValue ad path expandedNodes
+            Data.JsonDelta.ArrayDelta ad ->
+                ad |> jsonViewer
 
-        Data.JsonDelta.JustValue jv ->
-            viewJsonValue jv path expandedNodes
+            Data.JsonDelta.JustValue jv ->
+                jv |> jsonViewer
 
-        Data.JsonDelta.ValueDeleted jv ->
-            div [ class "delta--deleted" ]
-                [ viewJsonValue jv path expandedNodes
-                ]
+            Data.JsonDelta.ValueDeleted jv ->
+                div [ class "delta--deleted" ]
+                    [ jv |> jsonViewer
+                    ]
 
-        Data.JsonDelta.NoChanges ->
-            text "Nothing changed"
+            Data.JsonDelta.NoChanges ->
+                text "Nothing changed"
 
 
-viewJsonValue : JsonValue -> List String -> List (List String) -> Html Msg
-viewJsonValue jv path expandedNodes =
+viewJsonValue : Component.JsonViewer.ExpandedNodes -> List String -> JsonValue -> Html Msg
+viewJsonValue expandedNodes path jv =
     Component.JsonViewer.view jv path expandedNodes ToggleNode
 
 
@@ -238,7 +242,7 @@ detailsBlock header content =
         ]
 
 
-viewTaskDetails : Int -> TaskReport -> List (List String) -> Html Msg
+viewTaskDetails : Int -> TaskReport -> Component.JsonViewer.ExpandedNodes -> Html Msg
 viewTaskDetails duration tr expandedNodes =
     case tr of
         HttpRequest http ->
@@ -261,7 +265,7 @@ viewTaskDetails duration tr expandedNodes =
                     , h4 [] [ text "Body" ]
                     , div []
                         [ http.request.data
-                            |> Maybe.map (\jv -> viewJsonValue jv [] expandedNodes)
+                            |> Maybe.map (viewJsonValue expandedNodes [ "requestBody" ])
                             |> Maybe.withDefault ("Ø" |> text)
                         ]
                     ]
@@ -283,7 +287,7 @@ viewTaskDetails duration tr expandedNodes =
                                     )
                                 |> div []
                             , h4 [] [ text "Body" ]
-                            , response.body |> Maybe.map (\jv -> viewJsonValue jv [] expandedNodes) |> Maybe.withDefault (text "Ø")
+                            , response.body |> Maybe.map (viewJsonValue expandedNodes [ "responseBody" ]) |> Maybe.withDefault (text "Ø")
                             ]
 
                         Nothing ->
@@ -291,7 +295,7 @@ viewTaskDetails duration tr expandedNodes =
                                 Just error ->
                                     [ h4 [] [ text "Error" ]
                                     , div []
-                                        [ viewJsonValue error [] expandedNodes
+                                        [ error |> viewJsonValue expandedNodes []
                                         ]
                                     ]
 
@@ -304,13 +308,13 @@ viewTaskDetails duration tr expandedNodes =
 
         CurrentTime x ->
             div [ class "task-report" ]
-                [ FeatherIcons.clock |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
+                [ FeatherIcons.clock |> mediumIcon
                 , span [] [ Strftime.format "%B %d %Y, %-I:%M:%S" (Date.fromTime x) |> text ]
                 ]
 
         FailTask err ->
             div [ class "task-report" ]
-                [ FeatherIcons.thumbsDown |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
+                [ FeatherIcons.thumbsDown |> mediumIcon
                 , span [] [ err |> toString |> text ]
                 ]
 
@@ -410,7 +414,7 @@ viewEvent selectedId e =
                     ]
                 , onClick <| SelectEvent id e
                 ]
-                [ FeatherIcons.activity |> FeatherIcons.withSize 18 |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.toHtml []
+                [ FeatherIcons.activity |> mediumIcon
                 , span [] [ text msg.name ]
                 , case diff of
                     Data.JsonDelta.ObjectDiff props ->
@@ -444,7 +448,7 @@ viewTask task =
     case task of
         HttpRequest http ->
             div [ class "task-report http-request" ]
-                [ Icons.send
+                [ View.Icons.send
                 , span [ class ("method " ++ (http.request.method |> String.toLower)) ] [ http.request.method |> text ]
                 , span [ class "url" ] [ http.request.url |> text ]
                 , case http.response of
@@ -457,19 +461,19 @@ viewTask task =
 
         CurrentTime x ->
             div [ class "task-report" ]
-                [ FeatherIcons.clock |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
+                [ FeatherIcons.clock |> mediumIcon
                 , span [] [ Strftime.format "%B %d %Y, %H:%M:%S" (Date.fromTime x) |> text ]
                 ]
 
         FailTask err ->
             div [ class "task-report" ]
-                [ FeatherIcons.thumbsDown |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
+                [ FeatherIcons.thumbsDown |> mediumIcon
                 , span [] [ err |> toString |> text ]
                 ]
 
         SucceedTask data ->
             div [ class "task-report" ]
-                [ FeatherIcons.thumbsUp |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
+                [ FeatherIcons.thumbsUp |> mediumIcon
                   --, span [ class "json-dump" ] [ data |> Encode.encode 4 |> text ]
                 ]
 
