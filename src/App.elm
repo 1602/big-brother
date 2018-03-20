@@ -131,7 +131,7 @@ update message model =
 
 view : Model -> Html Msg
 view model =
-    Views.App.layout
+    View.App.layout
         { sidebar =
             [ controls model.recordingEnabled
             , if model.groupByRay then
@@ -269,7 +269,7 @@ viewTaskDetails duration tr expandedNodes =
                     case http.response of
                         Just response ->
                             [ div []
-                                [ Views.Http.statusCodeBadge response.status
+                                [ View.Http.statusCodeBadge response.status
                                 , span [] [ " " ++ response.status.text |> text ]
                                 ]
                             , h4 [] [ text "Headers" ]

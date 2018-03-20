@@ -1,4 +1,4 @@
-module Views.Http exposing (statusCodeBadge)
+module View.Http exposing (statusCodeBadge)
 
 import Html exposing (Html, span, text)
 import Html.Attributes exposing (classList)
