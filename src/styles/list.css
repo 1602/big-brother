@@ -7,7 +7,14 @@
   min-height: 28px;
   align-items: center;
   display: flex;
+  background-color: #f2f2ed;
+  cursor: default;
 }
+
+.list__item:hover {
+  background-color: #deded7;
+}
+
 
 .list__item--success {
   box-shadow: var(--marker-size) 0 0 0 var(--ui-success) inset;
@@ -26,3 +33,6 @@
   box-shadow: var(--marker-size) 0 0 0 var(--ui-failure) inset;
 }
 
+.list__item .spread {
+  flex-grow: 1;
+}

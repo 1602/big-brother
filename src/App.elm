@@ -7,24 +7,30 @@ import Html.Events exposing (..)
 import Json.Decode as Decode exposing (Decoder, Value, decodeValue)
 import FeatherIcons
 import JsonValue exposing (JsonValue)
-import View.Icons exposing (mediumIcon)
+import View.Icons exposing (mediumIcon, smallIcon)
 import View.App exposing (detailsBlock)
 import Data.Event exposing (Event(..), TaskReport(..))
 import Data.JsonDiff exposing (JsonDiff(..))
 import Component.JsonViewer
 import View.Task
 import View.JsonDiff
+import Request.Application
+import Http
 
 
 type alias Model =
     { events : List Event
+    , applicationUrl : String
     , rays : List String
     , groupedEvents : Dict String (List Event)
     , recordingEnabled : Bool
+    , paused : Bool
     , isConnected : Bool
     , groupByRay : Bool
     , selectedId : Id
     , selectedEvent : Maybe Event
+    , selectedStartId : Id
+    , selectedStartEvent : Maybe Event
     , expandedNodes : Component.JsonViewer.ExpandedNodes
     , filter : Filter
     }
@@ -40,16 +46,20 @@ type alias Filter =
     }
 
 
-init : ( Model, Cmd Msg )
-init =
+init : { applicationUrl : String } -> ( Model, Cmd Msg )
+init { applicationUrl } =
     { events = []
+    , applicationUrl = applicationUrl
     , rays = []
     , groupedEvents = Dict.empty
     , groupByRay = True
     , recordingEnabled = True
+    , paused = False
     , isConnected = False
     , selectedId = ""
     , selectedEvent = Nothing
+    , selectedStartId = ""
+    , selectedStartEvent = Nothing
     , expandedNodes = []
     , filter = { succeed = False, fail = True }
     }
@@ -60,6 +70,9 @@ port event : (Value -> msg) -> Sub msg
 
 
 port connected : (Bool -> msg) -> Sub msg
+
+
+port setPrevState : Value -> Cmd msg
 
 
 
@@ -82,9 +95,14 @@ subscriptions model =
 
 
 type Msg
-    = EventReceived Value
+    = Nevermind (Result Http.Error ())
+    | EventReceived Value
     | SetConnectionStatus Bool
     | ToggleRecording
+    | TogglePause
+    | DiscardPostponedResume
+    | Resume
+    | Continue
     | SelectEvent Id Event
     | PurgeEvents
     | ToggleNode (List String)
@@ -93,6 +111,9 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update message model =
     case message of
+        Nevermind _ ->
+            model ! []
+
         EventReceived event ->
             decodeValue Data.Event.decoder event
                 |> Result.map2
@@ -121,13 +142,134 @@ update message model =
                 |> Result.withDefault (model ! [])
 
         SetConnectionStatus isConnected ->
-            { model | isConnected = isConnected } ! []
+            { model | isConnected = isConnected, selectedStartEvent = Nothing, selectedStartEvent = Nothing }
+                ! [ if isConnected then
+                        model.applicationUrl
+                            |> Request.Application.start model.paused
+                                (model.selectedStartEvent
+                                    |> Maybe.andThen
+                                        (\e ->
+                                            case e of
+                                                StateUpdate _ action state _ _ ->
+                                                    Just ( state, action )
+
+                                                _ ->
+                                                    Nothing
+                                        )
+                                )
+                            |> Http.send Nevermind
+                    else
+                        Cmd.none
+                  ]
 
         ToggleRecording ->
-            { model | recordingEnabled = not model.recordingEnabled } ! []
+            { model
+                | recordingEnabled = not model.recordingEnabled
+            }
+                ! []
+
+        DiscardPostponedResume ->
+            { model
+                | selectedStartEvent = Nothing
+                , selectedStartId = ""
+            }
+                ! []
+
+        Resume ->
+            { model
+                | paused = False
+                , events = removeEventsAfter model.selectedId model.events
+                , rays = removeRaysAfter model.selectedId model.rays model.groupedEvents
+                , selectedStartEvent =
+                    if model.isConnected then
+                        Nothing
+                    else
+                        model.selectedEvent
+                , selectedStartId =
+                    if model.isConnected then
+                        ""
+                    else
+                        model.selectedEvent
+                            |> Maybe.andThen
+                                (\e ->
+                                    case e of
+                                        StateUpdate id _ _ _ _ ->
+                                            Just id
+
+                                        _ ->
+                                            Nothing
+                                )
+                            |> Maybe.withDefault ""
+            }
+                ! if model.isConnected then
+                    if model.paused then
+                        [ model.applicationUrl
+                            |> Request.Application.resume
+                                (model.selectedEvent
+                                    |> Maybe.andThen
+                                        (\e ->
+                                            case e of
+                                                StateUpdate _ action state _ _ ->
+                                                    Just ( state, action )
+
+                                                _ ->
+                                                    Nothing
+                                        )
+                                )
+                            |> Http.send Nevermind
+                        , model.selectedEvent
+                            |> Maybe.andThen
+                                (\e ->
+                                    case e of
+                                        StateUpdate _ _ state _ _ ->
+                                            state
+                                                |> JsonValue.encode
+                                                |> setPrevState
+                                                |> Just
+
+                                        _ ->
+                                            Nothing
+                                )
+                            |> Maybe.withDefault Cmd.none
+                        ]
+                    else
+                        []
+                  else
+                    -- TODO handle posponed re-connection (starting from desired node)
+                    []
+
+        TogglePause ->
+            { model
+                | paused = not model.paused
+            }
+                ! if model.isConnected then
+                    if model.paused then
+                        [ model.applicationUrl
+                            |> Request.Application.resume Nothing
+                            |> Http.send Nevermind
+                        ]
+                    else
+                        [ model.applicationUrl
+                            |> Request.Application.pause
+                            |> Http.send Nevermind
+                        ]
+                  else
+                    []
+
+        Continue ->
+            model
+                ! [ model.applicationUrl
+                        |> Request.Application.continue
+                        |> Http.send Nevermind
+                  ]
 
         SelectEvent id event ->
-            { model | selectedId = id, selectedEvent = Just event, expandedNodes = [] } ! []
+            { model
+                | selectedId = id
+                , selectedEvent = Just event
+                , expandedNodes = []
+            }
+                ! []
 
         PurgeEvents ->
             { model
@@ -145,6 +287,53 @@ update message model =
                 ! []
 
 
+removeEventsAfter : Id -> List Event -> List Event
+removeEventsAfter id list =
+    list
+        |> List.reverse
+        |> List.foldl
+            (\item ( result, skip ) ->
+                if skip then
+                    ( result, True )
+                else
+                    ( item :: result, isStateUpdateWithId id item )
+            )
+            ( [], False )
+        |> (\( x, _ ) -> x)
+
+
+removeRaysAfter : Id -> List String -> Dict String (List Event) -> List String
+removeRaysAfter id rays groupedEvents =
+    let
+        containsEvent : Maybe (List Event) -> Bool
+        containsEvent events =
+            events
+                |> Maybe.map (List.any (isStateUpdateWithId id))
+                |> Maybe.withDefault False
+    in
+        rays
+            |> List.reverse
+            |> List.foldl
+                (\rayId ( result, skip ) ->
+                    if skip then
+                        ( result, True )
+                    else
+                        ( rayId :: result, groupedEvents |> Dict.get rayId |> containsEvent )
+                )
+                ( [], False )
+            |> (\( x, _ ) -> x)
+
+
+isStateUpdateWithId : Id -> Event -> Bool
+isStateUpdateWithId id event =
+    case event of
+        StateUpdate x _ _ _ _ ->
+            x == id
+
+        _ ->
+            False
+
+
 
 -- VIEW
 
@@ -154,10 +343,29 @@ view model =
     View.App.layout
         { sidebar =
             [ controls model
-            , if model.groupByRay then
-                raysStream model
-              else
-                eventsStream model.selectedId model.filter model.events
+            , div [ class "controls" ]
+                [ span
+                    [ class "icon-button"
+                    , onClick TogglePause
+                    ]
+                    [ smallIcon <|
+                        if model.paused then
+                            FeatherIcons.playCircle
+                        else
+                            FeatherIcons.pauseCircle
+                    ]
+                , span
+                    [ class "icon-button"
+                    , onClick Continue
+                    ]
+                    [ smallIcon <| FeatherIcons.cornerRightDown ]
+                ]
+            , div [ class "scrollable" ]
+                [ if model.groupByRay then
+                    raysStream model
+                  else
+                    eventsStream model.selectedId model.selectedStartId model.filter model.paused model.isConnected model.events
+                ]
             ]
         , content =
             [ model.selectedEvent |> Maybe.map (\e -> viewEventDetails e model.expandedNodes) |> Maybe.withDefault (text "") ]
@@ -211,22 +419,37 @@ dumpValue delta =
 
 controls : Model -> Html Msg
 controls model =
-    div [ class "controls" ]
-        [ if model.isConnected then
-            button [ class "button", onClick ToggleRecording ]
-                [ text <|
+    div [ class "controls" ] <|
+        if model.isConnected then
+            [ span
+                [ class "icon-button"
+                , onClick ToggleRecording
+                , title <|
                     if model.recordingEnabled then
                         "Pause recording"
                     else
                         "Resume recording"
                 ]
-          else
-            text "Disconnected from localhost:8989"
-        , if List.isEmpty model.events then
-            text ""
-          else
-            button [ class "button", onClick <| PurgeEvents ] [ text "Purge log" ]
-        ]
+                [ smallIcon <|
+                    if model.recordingEnabled then
+                        FeatherIcons.mic
+                    else
+                        FeatherIcons.micOff
+                ]
+            , if List.isEmpty model.events then
+                text ""
+              else
+                --button [ class "button button--outlined-secondary", onClick <| PurgeEvents ] [ FeatherIcons.trash2 |> smallIcon, text "Purge log" ]
+                span [ class "icon-button", onClick <| PurgeEvents, title "Purge log" ] [ FeatherIcons.trash2 |> smallIcon ]
+            , span
+                [ class "icon-button"
+                ]
+                [ FeatherIcons.filter |> smallIcon
+                ]
+            ]
+        else
+            [ View.App.error "Disconnected from localhost:8989 (trying to reconnect automatically)"
+            ]
 
 
 raysStream : Model -> Html Msg
@@ -235,23 +458,23 @@ raysStream model =
         |> List.reverse
         |> List.filterMap (viewRay model)
         |> List.map (\x -> div [ class "ray" ] [ x ])
-        |> div [ class "events-stream list" ]
+        |> div []
 
 
 viewRay : Model -> String -> Maybe (Html Msg)
 viewRay model rayId =
     model.groupedEvents
         |> Dict.get rayId
-        |> Maybe.map (eventsStream model.selectedId model.filter)
+        |> Maybe.map (eventsStream model.selectedId model.selectedStartId model.filter model.paused model.isConnected)
 
 
-eventsStream : Id -> Filter -> List Event -> Html Msg
-eventsStream selectedId filter events =
+eventsStream : Id -> Id -> Filter -> Bool -> Bool -> List Event -> Html Msg
+eventsStream selectedId selectedStartId filter paused isConnected events =
     events
         |> List.reverse
         |> List.filter (applyFilter filter)
         |> List.take 200
-        |> List.map (viewEvent selectedId)
+        |> List.map (viewEvent selectedId selectedStartId paused isConnected)
         |> div [ class "events-stream list" ]
 
 
@@ -273,8 +496,8 @@ applyFilter filter event =
             True
 
 
-viewEvent : Id -> Event -> Html Msg
-viewEvent selectedId e =
+viewEvent : Id -> Id -> Bool -> Bool -> Event -> Html Msg
+viewEvent selectedId selectedStartId paused isConnected e =
     case e of
         Data.Event.TaskEvent id duration isSuccess task ->
             div
@@ -303,14 +526,28 @@ viewEvent selectedId e =
                     ]
                 , onClick <| SelectEvent id e
                 ]
-                [ FeatherIcons.activity |> mediumIcon
-                , span [] [ text msg.name ]
-                , case diff of
-                    Data.JsonDiff.ObjectDiff props ->
-                        props
-                            |> List.map (\( key, diff ) -> span [ class (View.JsonDiff.classifyChange diff) ] [ text key ])
-                            |> span [ class "delta" ]
+                [ View.Icons.gitCommit
+                , span
+                    [ class "spread" ]
+                    [ span [] [ text msg.name ]
+                    , case diff of
+                        Data.JsonDiff.ObjectDiff props ->
+                            props
+                                |> List.map (\( key, diff ) -> span [ class (View.JsonDiff.classifyChange diff) ] [ text key ])
+                                |> span [ class "delta" ]
 
-                    _ ->
-                        text ""
+                        _ ->
+                            text ""
+                    ]
+                , if (paused || not isConnected) && id == selectedId then
+                    if id == selectedStartId then
+                        span
+                            [ class "icon-button", onClick DiscardPostponedResume ]
+                            [ smallIcon FeatherIcons.flag ]
+                    else
+                        span
+                            [ class "icon-button", onClick Resume ]
+                            [ smallIcon FeatherIcons.playCircle ]
+                  else
+                    text ""
                 ]

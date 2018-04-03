@@ -33,7 +33,18 @@ type TaskReport
     | FailTask ErrorObject
     | SucceedTask Value
     | CurrentTime Time
+    | GenericTask (Maybe String) JsonValue (Result JsonValue JsonValue)
     | UnknownTask Value
+
+
+
+{-
+   TODO:
+
+   Add generic event with template for preview and details. Register generic event types on connection.
+   Backend should have ability to describe templates for new custom events. Consider adding directives for filters / badges / titles / subtitles.
+
+-}
 
 
 decoder : Decoder Event
@@ -67,12 +78,27 @@ taskDecoder =
         taskReportDecoder
 
 
+genericTaskDecoder : Decoder TaskReport
+genericTaskDecoder =
+    Decode.map3 GenericTask
+        (Decode.at [ "spec", "preview" ] Decode.string |> Decode.maybe)
+        (Decode.field "spec" JsonValue.decoder)
+        (Decode.field "result"
+            (Decode.oneOf
+                [ Decode.field "data" JsonValue.decoder |> Decode.map Ok
+                , Decode.field "error" JsonValue.decoder |> Decode.map Err
+                ]
+            )
+        )
+
+
 taskReportDecoder : Decoder TaskReport
 taskReportDecoder =
     Decode.oneOf
         [ Data.Http.decoder |> Decode.map HttpRequest
         , currentTimeTaskDecoder
         , failSucceedTaskDecoder
+        , genericTaskDecoder
         , Decode.value |> Decode.map UnknownTask
         ]
 

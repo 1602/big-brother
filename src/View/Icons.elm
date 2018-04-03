@@ -1,4 +1,4 @@
-module View.Icons exposing (mediumIcon, send)
+module View.Icons exposing (smallIcon, mediumIcon, send, gitCommit)
 
 import Html exposing (Html)
 import Svg exposing (Svg, svg)
@@ -29,6 +29,26 @@ send =
         ]
 
 
+gitCommit : Html msg
+gitCommit =
+    svgFeatherIcon "git-commit"
+        [ Svg.circle [ cx "12", cy "12", r "4" ] []
+        , Svg.line [ x1 "1.05", y1 "12", x2 "7", y2 "12" ] []
+        , Svg.line [ x1 "17.01", y1 "12", x2 "22.96", y2 "12" ] []
+        ]
+
+
 mediumIcon : Icon -> Html msg
 mediumIcon ib =
-    ib |> FeatherIcons.withStrokeWidth 2 |> FeatherIcons.withSize 18 |> FeatherIcons.toHtml []
+    ib
+        |> FeatherIcons.withStrokeWidth 2
+        |> FeatherIcons.withSize 18
+        |> FeatherIcons.toHtml []
+
+
+smallIcon : Icon -> Html msg
+smallIcon ib =
+    ib
+        |> FeatherIcons.withStrokeWidth 2
+        |> FeatherIcons.withSize 14
+        |> FeatherIcons.toHtml []

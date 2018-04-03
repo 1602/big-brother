@@ -1,0 +1,16 @@
+.error {
+    background: var(--ui-failure);
+    color: var(--ui-failure--inverse);
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    box-sizing: border-box;
+    border-radius: var(--control-border-radius);
+    white-space: nowrap;
+    font-size: 12px;
+}
+
+
+.error > svg {
+  padding-right: 4px;
+}

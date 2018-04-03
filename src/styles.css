@@ -7,10 +7,29 @@
 @import './styles/json.css';
 @import './styles/http.css';
 @import './styles/details-block.css';
+@import './styles/error.css';
+
+.icon-button {
+  cursor: pointer;
+  display: inline-flex;
+  /*
+  background-color: lightgrey;
+  border-radius: 50%;
+  padding: 3px;
+  */
+}
+
+.icon-button:hover {
+  color: var(--color-brand-blue--700);
+}
+
+.button > svg {
+  margin-right: 5px;
+}
 
 .ray {
-  padding-bottom: 15px;
-  padding-top: 16px;
+  padding-bottom: 0px;
+  padding-top: 1px;
   border-bottom: 1px solid rgba(0,0,0,0.15);
 }
 
@@ -25,6 +44,12 @@
 
 .controls {
   padding: 5px;
+  /* box-shadow: 0px 2px 7px -4px black; */
+  background: #eee;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
 }
 
 .controls > * {
@@ -33,20 +58,14 @@
 
 .events-stream {
   width: 100%;
-  overflow: auto;
-  height: calc(100% - 30px);
+  padding: 5px;
 }
 
 .event-container {
-  background-color: #f2f2ed;
   padding: 5px;
   padding-left: 8px;
   margin-bottom: 2px;
   width: 100%;
-}
-
-.event-container:hover {
-  background-color: #deded7;
 }
 
 .task-report {

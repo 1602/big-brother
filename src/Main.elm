@@ -5,7 +5,7 @@ import App exposing (init, update, view, subscriptions)
 
 
 main =
-    Html.program
+    Html.programWithFlags
         { init = init
         , update = update
         , view = view

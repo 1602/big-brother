@@ -2,23 +2,37 @@
 
 require('./styles.css');
 
+const applicationUrl = 'http://localhost:8989';
+
 const Elm = require('./Main');
-const app = Elm.Main.fullscreen();
+const app = Elm.Main.fullscreen({ applicationUrl });
 const jdp = require('./assets/jdp.js').create();
 const uuid = require('uuid');
 
 let prevState = null;
 
-const source = new EventSource('http://localhost:8989/events');
-source.onmessage = (e) => app.ports.event.send(handleStateMutation(JSON.parse(e.data)));
-source.onopen = () => {
-    app.ports.connected.send(true);
-    // prevState = null;
-};
-source.onerror = () => {
-    app.ports.connected.send(false);
-    // prevState = null;
-};
+connect();
+
+app.ports.setPrevState.subscribe(state => prevState = state);
+
+function connect() {
+    const source = new EventSource(applicationUrl + '/events');
+    source.onmessage = (e) => app.ports.event.send(handleStateMutation(JSON.parse(e.data)));
+    source.addEventListener('close-app', onClose);
+
+    source.onopen = () => {
+        console.log('connected');
+        app.ports.connected.send(true);
+        // prevState = null;
+    };
+    source.onerror = onClose;
+
+    function onClose() {
+        source.close();
+        app.ports.connected.send(false);
+        setTimeout(connect, 5000);
+    }
+}
 
 function handleStateMutation(event) {
     if (event.event === 'update') {

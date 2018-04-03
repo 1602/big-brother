@@ -53,6 +53,16 @@ preview task =
                   --, span [ class "json-dump" ] [ data |> Encode.encode 4 |> text ]
                 ]
 
+        GenericTask preview spec _ ->
+            div [ class "task-report" ]
+                [ case preview of
+                    Just p ->
+                        p |> text
+
+                    Nothing ->
+                        spec |> JsonValue.encode |> Encode.encode 0 |> text
+                ]
+
         x ->
             x |> toString |> text
 
@@ -142,6 +152,26 @@ details duration tr jsonViewer =
         SucceedTask data ->
             div [ class "task-report" ]
                 [ span [ class "json-dump" ] [ data |> Encode.encode 4 |> text ]
+                ]
+
+        GenericTask preview spec res ->
+            div []
+                [ detailsBlock "Spec" <|
+                    [ spec |> viewJsonValue { jsonViewer | expandedNodes = [ "spec" ] :: jsonViewer.expandedNodes } [ "spec" ]
+                    ]
+                , case res of
+                    Ok data ->
+                        detailsBlock "Data" <|
+                            [ data |> viewJsonValue { jsonViewer | expandedNodes = [ "data" ] :: jsonViewer.expandedNodes } [ "data" ]
+                            ]
+
+                    Err error ->
+                        detailsBlock "Error" <|
+                            [ error |> viewJsonValue { jsonViewer | expandedNodes = [ "error" ] :: jsonViewer.expandedNodes } [ "error" ]
+                            ]
+                , detailsBlock "Duration" <|
+                    [ toString duration ++ "ms" |> text
+                    ]
                 ]
 
         UnknownTask x ->
