@@ -13,6 +13,10 @@
   margin-left: 4ch;
 }
 
+.json-value__array-item {
+  margin-left: 4ch;
+}
+
 .json-value__key--object {
   color: var(--color-mono--700);
 }

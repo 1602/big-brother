@@ -68,7 +68,7 @@ view jvr path jv =
                 items
                     |> List.indexedMap
                         (\index v ->
-                            div []
+                            div [ class "json-value json-value__array-item" ]
                                 [ span [ class "json-value json-value__key" ] [ toString index |> text ]
                                 , v |> view jvr (path ++ [ toString index ])
                                 ]
