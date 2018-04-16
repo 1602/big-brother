@@ -21,6 +21,6 @@
 
 .app__sidebar > .scrollable {
   overflow: auto;
-  height: calc(100% - 50px);
+  height: calc(100% - 70px);
 }
 
