@@ -3,7 +3,7 @@ module Component.JsonViewer exposing (JsonViewer, ExpandedNodes, view, toggle)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
-import JsonValue exposing (JsonValue)
+import Json.Value as JsonValue exposing (JsonValue)
 
 
 type alias ExpandedNodes =

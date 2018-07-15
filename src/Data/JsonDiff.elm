@@ -1,7 +1,7 @@
 module Data.JsonDiff exposing (JsonDiff(..), decoder)
 
 import Json.Decode as Decode exposing (Decoder)
-import JsonValue exposing (JsonValue)
+import Json.Value as JsonValue exposing (JsonValue)
 
 
 type JsonDiff

@@ -44,5 +44,6 @@ function handleStateMutation(event) {
         prevState = event.state;
     }
     event.id = event.id || uuid.v4();
+    event.prevState = prevState;
     return event;
 }

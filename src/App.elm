@@ -2,17 +2,17 @@ port module App exposing (..)
 
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes exposing (..)
+import Html.Attributes exposing (attribute, class, title, classList)
 import Html.Events exposing (..)
 import Json.Decode as Decode exposing (Decoder, Value, decodeValue)
 import FeatherIcons
-import JsonValue exposing (JsonValue)
+import Json.Value as JsonValue exposing (JsonValue)
 import View.Icons exposing (mediumIcon, smallIcon)
 import View.App exposing (detailsBlock)
 import Data.Event exposing (Event(..), TaskReport(..))
 import Data.JsonDiff exposing (JsonDiff(..))
-import Component.JsonViewer
 import View.Task
+import View.Json
 import View.JsonDiff
 import Request.Application
 import Http
@@ -31,7 +31,6 @@ type alias Model =
     , selectedEvent : Maybe Event
     , selectedStartId : Id
     , selectedStartEvent : Maybe Event
-    , expandedNodes : Component.JsonViewer.ExpandedNodes
     , filter : Filter
     }
 
@@ -60,7 +59,6 @@ init { applicationUrl } =
     , selectedEvent = Nothing
     , selectedStartId = ""
     , selectedStartEvent = Nothing
-    , expandedNodes = []
     , filter = { succeed = False, fail = True }
     }
         ! []
@@ -101,11 +99,10 @@ type Msg
     | ToggleRecording
     | TogglePause
     | DiscardPostponedResume
-    | Resume
+    | Resume Id
     | Continue
     | SelectEvent Id Event
     | PurgeEvents
-    | ToggleNode (List String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -150,8 +147,8 @@ update message model =
                                     |> Maybe.andThen
                                         (\e ->
                                             case e of
-                                                StateUpdate _ action state _ _ ->
-                                                    Just ( state, action )
+                                                StateUpdate _ _ _ prevState _ msg ->
+                                                    Just ( prevState, "", msg )
 
                                                 _ ->
                                                     Nothing
@@ -175,11 +172,13 @@ update message model =
             }
                 ! []
 
-        Resume ->
+        Resume rayId ->
             { model
                 | paused = False
                 , events = removeEventsAfter model.selectedId model.events
-                , rays = removeRaysAfter model.selectedId model.rays model.groupedEvents
+                , rays =
+                    removeRaysAfter model.selectedId model.rays model.groupedEvents
+                    -- TODO: also remove eventsAfter in events grouped by ray
                 , selectedStartEvent =
                     if model.isConnected then
                         Nothing
@@ -193,7 +192,7 @@ update message model =
                             |> Maybe.andThen
                                 (\e ->
                                     case e of
-                                        StateUpdate id _ _ _ _ ->
+                                        StateUpdate id _ _ _ _ _ ->
                                             Just id
 
                                         _ ->
@@ -209,8 +208,8 @@ update message model =
                                     |> Maybe.andThen
                                         (\e ->
                                             case e of
-                                                StateUpdate _ action state _ _ ->
-                                                    Just ( state, action )
+                                                StateUpdate _ action state prevState _ msg ->
+                                                    Just ( prevState, rayId, msg )
 
                                                 _ ->
                                                     Nothing
@@ -221,7 +220,7 @@ update message model =
                             |> Maybe.andThen
                                 (\e ->
                                     case e of
-                                        StateUpdate _ _ state _ _ ->
+                                        StateUpdate _ _ state prevState _ _ ->
                                             state
                                                 |> JsonValue.encode
                                                 |> setPrevState
@@ -267,7 +266,6 @@ update message model =
             { model
                 | selectedId = id
                 , selectedEvent = Just event
-                , expandedNodes = []
             }
                 ! []
 
@@ -280,12 +278,6 @@ update message model =
             }
                 ! []
 
-        ToggleNode path ->
-            { model
-                | expandedNodes = model.expandedNodes |> Component.JsonViewer.toggle path
-            }
-                ! []
-
 
 removeEventsAfter : Id -> List Event -> List Event
 removeEventsAfter id list =
@@ -295,8 +287,10 @@ removeEventsAfter id list =
             (\item ( result, skip ) ->
                 if skip then
                     ( result, True )
+                else if isStateUpdateWithId id item then
+                    ( result, True )
                 else
-                    ( item :: result, isStateUpdateWithId id item )
+                    ( item :: result, False )
             )
             ( [], False )
         |> (\( x, _ ) -> x)
@@ -327,7 +321,7 @@ removeRaysAfter id rays groupedEvents =
 isStateUpdateWithId : Id -> Event -> Bool
 isStateUpdateWithId id event =
     case event of
-        StateUpdate x _ _ _ _ ->
+        StateUpdate x _ _ _ _ _ ->
             x == id
 
         _ ->
@@ -364,41 +358,36 @@ view model =
                 [ if model.groupByRay then
                     raysStream model
                   else
-                    eventsStream model.selectedId model.selectedStartId model.filter model.paused model.isConnected model.events
+                    eventsStream "" model.selectedId model.selectedStartId model.filter model.paused model.isConnected model.events
                 ]
             ]
         , content =
-            [ model.selectedEvent |> Maybe.map (\e -> viewEventDetails e model.expandedNodes) |> Maybe.withDefault (text "") ]
+            [ model.selectedEvent |> Maybe.map (\e -> viewEventDetails e) |> Maybe.withDefault (text "") ]
         }
 
 
-viewEventDetails : Event -> Component.JsonViewer.ExpandedNodes -> Html Msg
-viewEventDetails e expandedNodes =
+viewEventDetails : Event -> Html Msg
+viewEventDetails e =
     case e of
         TaskEvent _ duration _ tr ->
-            View.Task.details duration tr { expandedNodes = expandedNodes, onToggle = ToggleNode }
+            View.Task.details duration tr
 
-        StateUpdate _ command state diff message ->
+        StateUpdate _ command state _ diff message ->
             div [ class "state-update" ]
                 [ detailsBlock ("Message: " ++ message.name)
                     [ h4 [] [ text "payload" ]
-                    , message.payload |> viewJsonValue ([ "payload" ] :: expandedNodes) [ "payload" ]
+                    , message.payload |> View.Json.view [ [ "payload" ] ]
                     ]
                 , detailsBlock "State Update"
                     [ h4 [] [ text "state ∆" ]
-                    , diff |> View.JsonDiff.view [ "diff" ] { expandedNodes = expandedNodes, onToggle = ToggleNode }
+                    , diff |> View.JsonDiff.view []
                     , h4 [] [ text "updated state" ]
-                    , state |> viewJsonValue expandedNodes [ "state" ]
+                    , state |> View.Json.view []
                     ]
                 , detailsBlock "Command"
-                    [ command |> viewJsonValue ([ "command" ] :: expandedNodes) [ "command" ]
+                    [ command |> View.Json.view [ [ "command" ] ]
                     ]
                 ]
-
-
-viewJsonValue : Component.JsonViewer.ExpandedNodes -> List String -> JsonValue -> Html Msg
-viewJsonValue expandedNodes path =
-    Component.JsonViewer.view { expandedNodes = expandedNodes, onToggle = ToggleNode } path
 
 
 dumpValue : JsonDiff -> String
@@ -465,16 +454,16 @@ viewRay : Model -> String -> Maybe (Html Msg)
 viewRay model rayId =
     model.groupedEvents
         |> Dict.get rayId
-        |> Maybe.map (eventsStream model.selectedId model.selectedStartId model.filter model.paused model.isConnected)
+        |> Maybe.map (eventsStream rayId model.selectedId model.selectedStartId model.filter model.paused model.isConnected)
 
 
-eventsStream : Id -> Id -> Filter -> Bool -> Bool -> List Event -> Html Msg
-eventsStream selectedId selectedStartId filter paused isConnected events =
+eventsStream : Id -> Id -> Id -> Filter -> Bool -> Bool -> List Event -> Html Msg
+eventsStream rayId selectedId selectedStartId filter paused isConnected events =
     events
         |> List.reverse
         |> List.filter (applyFilter filter)
         |> List.take 200
-        |> List.map (viewEvent selectedId selectedStartId paused isConnected)
+        |> List.map (viewEvent rayId selectedId selectedStartId paused isConnected)
         |> div [ class "events-stream list" ]
 
 
@@ -492,12 +481,12 @@ applyFilter filter event =
                 _ ->
                     True
 
-        StateUpdate _ _ _ _ _ ->
+        StateUpdate _ _ _ _ _ _ ->
             True
 
 
-viewEvent : Id -> Id -> Bool -> Bool -> Event -> Html Msg
-viewEvent selectedId selectedStartId paused isConnected e =
+viewEvent : Id -> Id -> Id -> Bool -> Bool -> Event -> Html Msg
+viewEvent rayId selectedId selectedStartId paused isConnected e =
     case e of
         Data.Event.TaskEvent id duration isSuccess task ->
             div
@@ -515,7 +504,7 @@ viewEvent selectedId selectedStartId paused isConnected e =
                   --, span [] [ text (toString duration) ]
                 ]
 
-        Data.Event.StateUpdate id _ state diff msg ->
+        Data.Event.StateUpdate id _ state prevState diff msg ->
             div
                 [ classList
                     [ ( "event-container", True )
@@ -546,7 +535,7 @@ viewEvent selectedId selectedStartId paused isConnected e =
                             [ smallIcon FeatherIcons.flag ]
                     else
                         span
-                            [ class "icon-button", onClick Resume ]
+                            [ class "icon-button", onClick (Resume rayId) ]
                             [ smallIcon FeatherIcons.playCircle ]
                   else
                     text ""

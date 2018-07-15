@@ -1,46 +1,14 @@
-.json-value {
-  font-family: var(--font-family--mono);
-  line-height: 1.6;
-}
-
-.json-value--collapsed {
-  color: grey;
-  cursor: pointer;
-  background-color: var(--color-blue--100);
-}
-
-.json-value__object-property {
-  margin-left: 4ch;
-}
-
-.json-value__array-item {
-  margin-left: 4ch;
-}
-
-.json-value__key--object {
-  color: var(--color-mono--700);
-}
-
-.json-value__key:after {
-  content: ': ';
-}
-
-.json-value__key--array {
-  color: royalblue;
-}
-
-.json-value--string {
-  color: var(--color-yellow--700);
-}
-
-.json-value--number {
-  color: var(--color-blue--700);
-}
-
-.json-value--null {
-  color: var(--color-red--700);
-}
-
-.json-value--bool {
-  color: var(--color-grand-blue--700);
+json-viewer {
+    display: inline-block;
+    --collapsed-node-bullet: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'><polyline points='9 18 15 12 9 6'></polyline></svg>");
+    --expanded-node-bullet: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+    --adjust-bullet-top: 1px;
+    --font-family: var(--font-family--mono);
+    --preview-background: var(--color-blue--100);
+    --key-color: var(--color-mono--700);
+    --string-value-color: var(--color-yellow--700);
+    --numeric-value-color: var(--color-blue--700);
+    --null-value-color: var(--color-red--700);
+    --boolean-value-color: var(--color-brand-blue--700);
+    --toggle-color: #555;
 }

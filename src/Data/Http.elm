@@ -1,6 +1,6 @@
 module Data.Http exposing (Status, Request, Response, HttpClientTransaction, decoder)
 
-import JsonValue exposing (JsonValue)
+import Json.Value as JsonValue exposing (JsonValue)
 import Json.Decode as Decode exposing (Decoder)
 
 

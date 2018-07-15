@@ -1,26 +1,31 @@
 module Request.Application exposing (start, pause, resume, continue)
 
 import HttpBuilder exposing (post, withExpect, toRequest, withJsonBody)
-import JsonValue exposing (JsonValue)
+import Json.Value as JsonValue exposing (JsonValue)
 import Http exposing (Request, Error)
 import Json.Encode as Encode exposing (Value)
+import Data.Event exposing (Message)
 
 
 --import Json.Decode as Decode
 --import Request.Helpers exposing (withListExpected, withJsonExpected)
 
 
-addCheckpoint : Maybe ( JsonValue, JsonValue ) -> List ( String, Value ) -> List ( String, Value )
+addCheckpoint : Maybe ( JsonValue, String, Message ) -> List ( String, Value ) -> List ( String, Value )
 addCheckpoint checkpoint body =
     case checkpoint of
-        Just ( state, action ) ->
-            ( "state", JsonValue.encode state ) :: ( "action", JsonValue.encode action ) :: body
+        Just ( state, rayId, msg ) ->
+            ( "state", JsonValue.encode state )
+                :: ( "message", Encode.string msg.name )
+                :: ( "payload", JsonValue.encode msg.payload )
+                :: ( "rayId", Encode.string rayId )
+                :: body
 
         _ ->
             body
 
 
-start : Bool -> Maybe ( JsonValue, JsonValue ) -> String -> Request ()
+start : Bool -> Maybe ( JsonValue, String, Message ) -> String -> Request ()
 start paused checkpoint url =
     let
         body =
@@ -44,7 +49,7 @@ pause url =
         |> toRequest
 
 
-resume : Maybe ( JsonValue, JsonValue ) -> String -> Request ()
+resume : Maybe ( JsonValue, String, Message ) -> String -> Request ()
 resume checkpoint url =
     let
         body =

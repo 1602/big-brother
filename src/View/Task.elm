@@ -8,10 +8,10 @@ import View.Http
 import View.Icons exposing (mediumIcon)
 import Data.Event exposing (TaskReport(..))
 import Strftime
-import Component.JsonViewer exposing (JsonViewer)
 import Date
 import Json.Encode as Encode
-import JsonValue exposing (JsonValue)
+import Json.Value as JsonValue exposing (JsonValue)
+import View.Json
 
 
 preview : TaskReport -> Html msg
@@ -67,8 +67,17 @@ preview task =
             x |> toString |> text
 
 
-details : Int -> TaskReport -> Component.JsonViewer.JsonViewer msg -> Html msg
-details duration tr jsonViewer =
+viewJsonValueExpandedRoot : JsonValue -> Html msg
+viewJsonValueExpandedRoot val =
+    Html.node "json-viewer"
+        [ attribute "value" <| Encode.encode 0 <| JsonValue.encode val
+        , attribute "expanded-nodes" "[[]]"
+        ]
+        []
+
+
+details : Int -> TaskReport -> Html msg
+details duration tr =
     case tr of
         HttpRequest http ->
             div [ class "http" ]
@@ -90,7 +99,7 @@ details duration tr jsonViewer =
                     , h4 [] [ text "Body" ]
                     , div []
                         [ http.request.data
-                            |> Maybe.map (viewJsonValue jsonViewer [ "requestBody" ])
+                            |> Maybe.map (View.Json.view [])
                             |> Maybe.withDefault ("Ø" |> text)
                         ]
                     ]
@@ -112,7 +121,7 @@ details duration tr jsonViewer =
                                     )
                                 |> div []
                             , h4 [] [ text "Body" ]
-                            , response.body |> Maybe.map (viewJsonValue jsonViewer [ "responseBody" ]) |> Maybe.withDefault (text "Ø")
+                            , response.body |> Maybe.map (View.Json.view []) |> Maybe.withDefault (text "Ø")
                             ]
 
                         Nothing ->
@@ -120,7 +129,7 @@ details duration tr jsonViewer =
                                 Just error ->
                                     [ h4 [] [ text "Error" ]
                                     , div []
-                                        [ error |> viewJsonValue jsonViewer []
+                                        [ error |> View.Json.view []
                                         ]
                                     ]
 
@@ -142,11 +151,11 @@ details duration tr jsonViewer =
                 case err of
                     Data.Event.ObjectWithMessage { message, error } ->
                         [ h4 [] [ text message ]
-                        , error |> viewJsonValue jsonViewer [ "error" ]
+                        , error |> View.Json.view []
                         ]
 
                     Data.Event.Unformatted error ->
-                        [ error |> viewJsonValue jsonViewer [ "error" ]
+                        [ error |> View.Json.view []
                         ]
 
         SucceedTask data ->
@@ -157,17 +166,17 @@ details duration tr jsonViewer =
         GenericTask preview spec res ->
             div []
                 [ detailsBlock "Spec" <|
-                    [ spec |> viewJsonValue { jsonViewer | expandedNodes = [ "spec" ] :: jsonViewer.expandedNodes } [ "spec" ]
+                    [ spec |> viewJsonValueExpandedRoot
                     ]
                 , case res of
                     Ok data ->
                         detailsBlock "Data" <|
-                            [ data |> viewJsonValue { jsonViewer | expandedNodes = [ "data" ] :: jsonViewer.expandedNodes } [ "data" ]
+                            [ data |> viewJsonValueExpandedRoot
                             ]
 
                     Err error ->
                         detailsBlock "Error" <|
-                            [ error |> viewJsonValue { jsonViewer | expandedNodes = [ "error" ] :: jsonViewer.expandedNodes } [ "error" ]
+                            [ error |> viewJsonValueExpandedRoot
                             ]
                 , detailsBlock "Duration" <|
                     [ toString duration ++ "ms" |> text
@@ -176,8 +185,3 @@ details duration tr jsonViewer =
 
         UnknownTask x ->
             x |> toString |> text
-
-
-viewJsonValue : JsonViewer msg -> List String -> JsonValue -> Html msg
-viewJsonValue jsonViewer path =
-    Component.JsonViewer.view jsonViewer path

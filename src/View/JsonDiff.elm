@@ -1,9 +1,11 @@
 module View.JsonDiff exposing (view, classifyChange)
 
 import Html exposing (..)
-import Html.Attributes exposing (..)
+import Html.Attributes exposing (attribute, class)
 import Component.JsonViewer as JsonViewer exposing (JsonViewer)
 import Data.JsonDiff exposing (JsonDiff(..))
+import Json.Encode as Encode exposing (string, list)
+import Json.Value as JsonValue exposing (JsonValue)
 
 
 classifyChange : JsonDiff -> String
@@ -22,11 +24,20 @@ classifyChange delta =
             "delta__key"
 
 
-view : List String -> JsonViewer msg -> JsonDiff -> Html msg
-view path jvr diff =
+viewJsonValue : List (List String) -> JsonValue -> Html msg
+viewJsonValue expandedNodes val =
+    Html.node "json-viewer"
+        [ Html.Attributes.attribute "value" <| Encode.encode 0 <| JsonValue.encode val
+        , Html.Attributes.attribute "expanded-nodes" <| Encode.encode 0 <| list <| List.map (List.map string >> list) <| expandedNodes
+        ]
+        []
+
+
+view : List String -> JsonDiff -> Html msg
+view path diff =
     let
         jsonViewer x =
-            JsonViewer.view jvr path x
+            viewJsonValue [] x
     in
         case diff of
             ObjectDiff props ->
@@ -35,7 +46,7 @@ view path jvr diff =
                         (\( key, diff ) ->
                             div []
                                 [ span [ class (classifyChange diff) ] [ key ++ ":" |> text ]
-                                , diff |> view (path ++ [ key ]) jvr
+                                , diff |> view (path ++ [ key ])
                                 ]
                         )
                     |> div [ class "delta" ]
